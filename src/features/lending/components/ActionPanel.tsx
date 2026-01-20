@@ -52,6 +52,7 @@ export function ActionPanel({
   const [inputAmount, setInputAmount] = React.useState<string>("");
   const [isWithdrawMax, setIsWithdrawMax] = React.useState(false);
   const [showReviewModal, setShowReviewModal] = React.useState(false);
+  const [hasInteracted, setHasInteracted] = React.useState(false);
 
   // Clear input on successful transaction (after wallet confirmation completes)
   React.useEffect(() => {
@@ -96,6 +97,7 @@ export function ActionPanel({
   const handleInputChange = (value: string) => {
     setInputAmount(value);
     setIsWithdrawMax(false);
+    setHasInteracted(true);
     if (mode === "deposit" && onAmountChange) {
       onAmountChange(value);
     }
@@ -329,29 +331,46 @@ export function ActionPanel({
             )}
           </div>
           
-          {/* Amount Input */}
-          <div className="relative">
+          {/* Amount Input - Raised surface with subtle accent */}
+          <div className="relative group">
+            {/* Subtle top accent bar */}
+            <div 
+              className={`absolute top-0 left-3 right-3 h-[2px] rounded-b-full transition-opacity z-10 ${
+                insufficientBalanceInfo
+                  ? "bg-red-400/60"
+                  : account && mode === "deposit" && hasNoPosition && !inputAmount && !hasInteracted
+                    ? "bg-[#2dd4bf]/50 animate-subtle-pulse"
+                    : "bg-[#2dd4bf]/20 opacity-0 group-focus-within:opacity-100"
+              }`}
+            />
             <div
               className={`flex items-center rounded-lg overflow-hidden transition-all ${
                 insufficientBalanceInfo
                   ? "ring-1 ring-red-500/50"
-                  : mode === "deposit" && hasNoPosition && !inputAmount
-                    ? "ring-2 ring-[#2dd4bf]/40 animate-pulse-ring"
-                    : "ring-1 ring-white/[0.08] focus-within:ring-[#2dd4bf]/40"
+                  : "ring-1 ring-white/[0.12] hover:ring-white/[0.18] focus-within:ring-[#2dd4bf]/50"
               }`}
               style={{
-                background: "rgba(0, 0, 0, 0.25)",
+                background: "rgba(255, 255, 255, 0.06)",
               }}
             >
               <div className="flex-1 flex items-center">
-                <span className="pl-3 text-xs text-white/50">Amount</span>
                 <input
                   type="number"
                   value={inputAmount}
                   onChange={(e) => handleInputChange(e.target.value)}
-                  placeholder={`Enter ${pool.asset}`}
-                  className="flex-1 bg-transparent px-2 py-2.5 text-white text-sm font-medium focus:outline-none placeholder:text-white/30 w-full font-mono"
+                  onFocus={() => setHasInteracted(true)}
+                  placeholder="0.0"
+                  className="flex-1 bg-transparent pl-3 pr-2 py-2.5 text-white text-base font-semibold focus:outline-none placeholder:text-white/40 w-full font-mono"
                 />
+                {maxBalance > 0 && (
+                  <button
+                    onClick={() => handleQuickPercent(100)}
+                    className="mr-2 px-2 py-0.5 text-[10px] font-bold bg-[#2dd4bf]/15 hover:bg-[#2dd4bf]/25 text-[#2dd4bf] hover:text-[#5eead4] rounded border border-[#2dd4bf]/20 hover:border-[#2dd4bf]/40 transition-all"
+                    disabled={maxBalance <= 0}
+                  >
+                    MAX
+                  </button>
+                )}
               </div>
               <div className="px-3 py-2.5 bg-[#2dd4bf] text-[#0d1a1f] font-semibold text-xs">
                 {pool.asset}
@@ -359,25 +378,18 @@ export function ActionPanel({
             </div>
           </div>
 
-          {/* Quick % Buttons */}
+          {/* Quick % Buttons - Secondary, below input */}
           <div className="flex gap-1.5">
             {[25, 50, 75].map((p) => (
               <button
                 key={p}
                 onClick={() => handleQuickPercent(p)}
-                className="flex-1 py-1.5 text-[10px] font-semibold bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-md text-white/60 hover:text-white transition-all"
+                className="flex-1 py-1 text-[10px] font-medium bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.05] rounded text-white/40 hover:text-white/70 transition-all"
                 disabled={maxBalance <= 0}
               >
                 {p}%
               </button>
             ))}
-            <button
-              onClick={() => handleQuickPercent(100)}
-              className="flex-1 py-1.5 text-[10px] font-semibold bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-md text-white/60 hover:text-white transition-all"
-              disabled={maxBalance <= 0}
-            >
-              MAX
-            </button>
           </div>
         </div>
 

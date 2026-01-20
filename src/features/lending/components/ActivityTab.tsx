@@ -72,7 +72,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
     
     // Calculate target scroll position to put element near top of viewport
     // Account for: navbar (~56px) + tab bar (~52px) + section chips (~44px) + some padding (~20px)
-    const totalHeaderHeight = 172;
+    const totalHeaderHeight = 190;
     const targetScrollPosition = absoluteElementTop - totalHeaderHeight;
     
     window.scrollTo({
@@ -131,7 +131,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
           setIsChipsSticky(!entry.isIntersecting);
         });
       },
-      { threshold: 0, rootMargin: "-60px 0px 0px 0px" }
+      { threshold: 0, rootMargin: "-140px 0px 0px 0px" }
     );
 
     observer.observe(sentinelRef.current);
@@ -154,7 +154,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
             }
           });
         },
-        { threshold: [0.2, 0.4, 0.6], rootMargin: "-180px 0px -40% 0px" }
+        { threshold: [0.2, 0.4, 0.6], rootMargin: "-200px 0px -40% 0px" }
       );
 
       observer.observe(ref.current);
@@ -185,9 +185,9 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       {/* Section Navigation - Smart Sticky */}
       <div
         className={`
-          z-30 -mx-6 px-6 transition-all duration-200
+          z-30 transition-all duration-200
           ${isChipsSticky 
-            ? "sticky top-[116px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md" 
+            ? "sticky top-[166px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md -mx-6 px-6" 
             : "relative pb-3 pt-1"
           }
         `}

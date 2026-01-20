@@ -8,8 +8,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import NavBar from "../features/shared/components/NavBar";
 import PoolCompareTable from "../features/lending/components/PoolCompareTable";
-import SnapshotStrip from "../features/lending/components/SnapshotStrip";
-import PositionStrip from "../features/lending/components/PositionStrip";
+import StickyContextStrip from "../features/lending/components/StickyContextStrip";
+import PoolSwitchToast from "../features/lending/components/PoolSwitchToast";
+import PortfolioCard from "../features/lending/components/PortfolioCard";
 import ActionPanel from "../features/lending/components/ActionPanel";
 import { OverviewTiles } from "../features/lending/components/OverviewTiles";
 import SlidePanel from "../features/shared/components/SlidePanel";
@@ -45,6 +46,7 @@ import {
   buildWithdrawTransaction,
   buildWithdrawAllTransaction,
 } from "../lib/suiTransactions";
+import { Footer } from "../components/Footer";
 
 export function PoolsPage() {
   const account = useCurrentAccount();
@@ -85,6 +87,11 @@ export function PoolsPage() {
 
   const [selectedPoolId, setSelectedPoolId] = React.useState<string | null>(null);
   const [poolSwitchKey, setPoolSwitchKey] = React.useState(0);
+  const [poolSwitchToast, setPoolSwitchToast] = React.useState<{
+    visible: boolean;
+    asset: string | null;
+    iconUrl?: string;
+  }>({ visible: false, asset: null });
 
   const selectedPool = React.useMemo(() => {
     if (pools.length === 0) return null;
@@ -417,7 +424,7 @@ export function PoolsPage() {
       // We scroll to detailsRef instantly (no smooth) to set up the right context,
       // then the tab component's useEffect will handle the smooth scroll to section.
       if (detailsRef.current) {
-        const headerOffset = 172;
+        const headerOffset = 180;
         const elementRect = detailsRef.current.getBoundingClientRect();
         const absoluteElementTop = elementRect.top + window.scrollY;
         const targetScrollPosition = absoluteElementTop - headerOffset;
@@ -433,9 +440,23 @@ export function PoolsPage() {
 
   const handlePoolSelect = (poolId: string) => {
     if (poolId !== selectedPoolId) {
+      const newPool = pools.find((p) => p.id === poolId);
       setPoolSwitchKey((prev) => prev + 1);
       setSelectedPoolId(poolId);
       setPendingDepositAmount("");
+      
+      // Show pool switch toast
+      if (newPool) {
+        setPoolSwitchToast({
+          visible: true,
+          asset: newPool.asset,
+          iconUrl: newPool.ui.iconUrl,
+        });
+        // Auto-hide after animation completes
+        setTimeout(() => {
+          setPoolSwitchToast({ visible: false, asset: null });
+        }, 2000);
+      }
     }
   };
 
@@ -472,7 +493,7 @@ export function PoolsPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              MAIN CONTENT: Unified right rail layout
+              MAIN CONTENT: Unified layout with sticky headers
               ═══════════════════════════════════════════════════════════════════ */}
           <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 pb-16">
             {selectedPool ? (
@@ -485,7 +506,7 @@ export function PoolsPage() {
                 }`}
               >
                 {/* ═══════════════════════════════════════════════════════════════
-                    LEFT COLUMN: Pool Selection + Main Content
+                    LEFT COLUMN: All main content
                     ═══════════════════════════════════════════════════════════════ */}
                 <div className="min-w-0 space-y-6">
                   {/* Pool Selection + Quick Compare */}
@@ -541,11 +562,12 @@ export function PoolsPage() {
                         pools={pools}
                         selectedPoolId={selectedPoolId}
                         onSelectPool={handlePoolSelect}
+                        userPositions={userPositions}
                       />
                     </div>
                   </div>
 
-                  {/* Mobile Only: Deposit Card - shows after pool selection on mobile */}
+                  {/* Mobile Only: Deposit Card */}
                   <div className="lg:hidden">
                     <ActionPanel
                       pool={selectedPool}
@@ -562,56 +584,61 @@ export function PoolsPage() {
                     />
                   </div>
 
-                  {/* Snapshot Strip */}
-                  <SnapshotStrip pool={selectedPool} />
+                  {/* ═══════════════════════════════════════════════════════════════
+                      STICKY HEADER STACK - Context + Tabs merged
+                      ═══════════════════════════════════════════════════════════════ */}
+                  <div className="sticky top-[56px] z-40 bg-[#0d1a1f] rounded-lg border border-white/[0.06] overflow-hidden">
+                    {/* Context Strip - Compact */}
+                    <div className="px-3 py-1.5 border-b border-white/[0.04]">
+                      <StickyContextStrip
+                        pool={selectedPool}
+                        pools={pools}
+                        selectedPoolId={selectedPoolId}
+                        onSelectPool={handlePoolSelect}
+                      />
+                    </div>
+                    
+                    {/* Main Tabs - Directly attached */}
+                    {overviewTab !== "overview" && (
+                      <div className="px-3 py-1">
+                        <div className="tab-bar relative">
+                          {mainTabs.map((tab) => (
+                            <button
+                              key={tab.key}
+                              onClick={() => handleTabClick(tab.key)}
+                              className={`tab-item ${overviewTab === tab.key ? "active" : ""}`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                  {/* Navigation for detail views */}
+                  {/* Back button - Subtle, inline with content */}
                   {overviewTab !== "overview" && (
-                    <div className="flex items-center gap-3">
+                    <div ref={detailsRef} className="flex items-center gap-2 pt-4 scroll-mt-32">
                       <button
                         onClick={() => setOverviewTab("overview")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white/60 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg transition-all"
+                        className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors"
                       >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                        Back to Overview
+                        Overview
                       </button>
-                      <div className="flex items-center gap-1.5 text-sm text-white/40">
-                        <span>Pools</span>
-                        <span>/</span>
-                        <span>{selectedPool?.asset}</span>
-                        <span>/</span>
-                        <span className="text-[#2dd4bf] font-medium">{getTabLabel(overviewTab)}</span>
-                      </div>
+                      <span className="text-white/20">·</span>
+                      <span className="text-xs text-white/30">{selectedPool?.asset}</span>
+                      <span className="text-white/20">·</span>
+                      <span className="text-xs text-[#2dd4bf]/70">{getTabLabel(overviewTab)}</span>
                     </div>
                   )}
                   
-                  {/* Tab bar - STICKY Layer 1: sticks below main navbar (~56px) */}
-                  {overviewTab !== "overview" && (
-                    <div className="sticky top-[56px] z-40 py-2 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.08] shadow-lg shadow-black/30 rounded-lg">
-                      <div className="tab-bar relative">
-                        {mainTabs.map((tab) => (
-                          <button
-                            key={tab.key}
-                            onClick={() => handleTabClick(tab.key)}
-                            className={`tab-item ${overviewTab === tab.key ? "active" : ""}`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Details anchor for overview */}
+                  {overviewTab === "overview" && (
+                    <div ref={detailsRef} className="scroll-mt-32" />
                   )}
-
-                  {/* Details Anchor */}
-                  <div 
-                    ref={detailsRef} 
-                    className="flex items-center gap-2 scroll-mt-16"
-                  >
-                    <span className="text-[10px] uppercase tracking-wider font-medium text-white/40">Details</span>
-                    <div className="flex-1 h-px bg-white/[0.06]" />
-                  </div>
 
                   {/* Tab Content */}
                   <div className={`surface-elevated p-6 transition-all duration-300 ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
@@ -663,7 +690,7 @@ export function PoolsPage() {
                 </div>
 
                 {/* ═══════════════════════════════════════════════════════════════
-                    SEAM DIVIDER: Lives between main content and right rail
+                    SEAM DIVIDER
                     ═══════════════════════════════════════════════════════════════ */}
                 <RailDivider
                   isCollapsed={isRailCollapsed}
@@ -671,11 +698,10 @@ export function PoolsPage() {
                 />
 
                 {/* ═══════════════════════════════════════════════════════════════
-                    RIGHT RAIL: Sticky aside with Deposit + Earnings
+                    RIGHT RAIL: Deposit + Portfolio (sticky)
                     ═══════════════════════════════════════════════════════════════ */}
                 {!isRailCollapsed && (
-                  <aside className="sticky top-20 self-start space-y-4 pl-4">
-                    {/* Deposit Card */}
+                  <aside className="sticky top-20 self-start space-y-4 pl-4 hidden lg:block">
                     <ActionPanel
                       pool={selectedPool}
                       onDeposit={handleDeposit}
@@ -689,14 +715,12 @@ export function PoolsPage() {
                       currentPositionBalance={selectedPoolDepositedBalance}
                       onShowHowItWorks={() => handleTabClick("howItWorks")}
                     />
-                    
-                    {/* Your Position Strip */}
-                    <PositionStrip
+                    <PortfolioCard
                       userAddress={account?.address}
                       pools={pools}
-                      selectedPool={selectedPool}
                       positions={userPositions}
                       onViewAllHistory={() => setHistoryOpen(true)}
+                      onSelectPool={handlePoolSelect}
                     />
                   </aside>
                 )}
@@ -772,6 +796,16 @@ export function PoolsPage() {
           setHistoryOpen(true);
         }}
       />
+
+      {/* Pool Switch Toast */}
+      <PoolSwitchToast
+        asset={poolSwitchToast.asset}
+        iconUrl={poolSwitchToast.iconUrl}
+        isVisible={poolSwitchToast.visible}
+      />
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }

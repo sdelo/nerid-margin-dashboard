@@ -145,21 +145,49 @@ body {
   animation: pulseSubtle 2s ease-in-out infinite;
 }
 
-/* Pulse ring animation for deposit input CTA */
-@keyframes pulseRing {
+/* Subtle accent bar pulse for input - only runs once, stops after 3 cycles */
+@keyframes subtlePulse {
 
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.4);
+    opacity: 0.3;
   }
 
   50% {
-    box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1);
+    opacity: 0.7;
   }
 }
 
-.animate-pulse-ring {
-  animation: pulseRing 2s ease-in-out infinite;
+.animate-subtle-pulse {
+  animation: subtlePulse 1.5s ease-in-out 3;
+  animation-fill-mode: forwards;
+}
+
+/* Slide up and fade for toasts */
+@keyframes slideUpFade {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+  }
+
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+
+.animate-slide-up-fade {
+  animation: slideUpFade 2s ease-out forwards;
 }
 
 a {

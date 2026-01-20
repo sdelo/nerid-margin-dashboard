@@ -200,10 +200,10 @@ export const PersonalPositions: FC<Props> = ({
                 <select
                   value={selectedCapId || ""}
                   onChange={(e) => setSelectedCapId(e.target.value)}
-                  className="bg-slate-700/50 border border-slate-600/50 rounded px-2 py-0.5 text-cyan-400 text-xs font-mono focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                  className="bg-slate-700 border border-slate-600/50 rounded px-2 py-0.5 text-cyan-400 text-xs font-mono focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                 >
                   {uniqueCapIds.map((capId) => (
-                    <option key={capId} value={capId}>
+                    <option key={capId} value={capId} className="bg-slate-700 text-cyan-400">
                       {truncateAddress(capId)}
                     </option>
                   ))}

@@ -185,6 +185,25 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
     const borrowConcentration =
       totalBorrow > 0 ? (top1Borrow / totalBorrow) * 100 : 0;
 
+    // Calculate HHI (Herfindahl-Hirschman Index)
+    const hhi = totalSupply > 0 
+      ? topSuppliers.reduce((sum, s) => {
+          const share = (s.netAmount / totalSupply) * 100;
+          return sum + share * share;
+        }, 0)
+      : 0;
+
+    // Calculate Gini coefficient from Lorenz curve
+    const gini = (() => {
+      if (topSuppliers.length === 0 || totalSupply === 0) return 0;
+      const sortedAmounts = topSuppliers.map(s => s.netAmount).sort((a, b) => a - b);
+      const n = sortedAmounts.length;
+      const sumIndexedValues = sortedAmounts.reduce((sum, amount, i) => sum + (i + 1) * amount, 0);
+      const sumValues = sortedAmounts.reduce((sum, amount) => sum + amount, 0);
+      const giniCoeff = (2 * sumIndexedValues) / (n * sumValues) - (n + 1) / n;
+      return Math.max(0, Math.min(1, giniCoeff));
+    })();
+
     return {
       totalSupply,
       totalBorrow,
@@ -192,6 +211,8 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
       top1Borrow,
       supplyConcentration,
       borrowConcentration,
+      hhi,
+      gini,
     };
   }, [topSuppliers, topBorrowers]);
 
@@ -305,6 +326,37 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
                   style={{ width: `${Math.min(concentration.borrowConcentration, 100)}%` }}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Gini & HHI Metrics */}
+          <div className="flex items-center gap-6 px-4 py-3 bg-white/[0.02] rounded-xl border border-white/[0.06]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/50">Gini Coefficient:</span>
+              <span className={`text-sm font-mono font-semibold ${
+                concentration.gini > 0.6 ? "text-red-400" :
+                concentration.gini > 0.4 ? "text-amber-400" :
+                "text-emerald-400"
+              }`}>
+                {concentration.gini.toFixed(2)}
+              </span>
+              <span className="text-[10px] text-white/30">
+                ({concentration.gini > 0.6 ? "High inequality" : concentration.gini > 0.4 ? "Moderate inequality" : "Low inequality"})
+              </span>
+            </div>
+            <div className="w-px h-6 bg-white/10" />
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/50">HHI:</span>
+              <span className={`text-sm font-mono font-semibold ${
+                concentration.hhi > 2500 ? "text-red-400" :
+                concentration.hhi > 1500 ? "text-amber-400" :
+                "text-emerald-400"
+              }`}>
+                {Math.round(concentration.hhi).toLocaleString()}
+              </span>
+              <span className="text-[10px] text-white/30">
+                ({concentration.hhi > 2500 ? "Highly concentrated" : concentration.hhi > 1500 ? "Moderately concentrated" : "Competitive"})
+              </span>
             </div>
           </div>
 

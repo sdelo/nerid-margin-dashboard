@@ -350,10 +350,10 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Concentration Risk - with tooltip */}
-          <div className="relative group/tile">
+          <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("concentration")} 
-              className="text-left w-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -401,21 +401,6 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
                   View →
                 </span>
               </div>
-              {/* Gini & HHI metrics */}
-              <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-white/40">Gini:</span>
-                  <span className="text-[11px] font-mono text-cyan-400">
-                    {tileData.whales.gini.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-white/40">HHI:</span>
-                  <span className="text-[11px] font-mono text-cyan-400">
-                    {Math.round(tileData.whales.hhi).toLocaleString()}
-                  </span>
-                </div>
-              </div>
             </button>
             {/* Hover tooltip */}
             <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-900 border border-[#2dd4bf]/30 rounded-lg shadow-xl opacity-0 group-hover/tile:opacity-100 transition-opacity pointer-events-none z-20">
@@ -429,10 +414,10 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           </div>
 
           {/* Withdrawal Liquidity - with tooltip */}
-          <div className="relative group/tile">
+          <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("liquidity")} 
-              className="text-left w-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -505,10 +490,10 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           </div>
 
           {/* Bad Debt Risk - with tooltip */}
-          <div className="relative group/tile">
+          <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("liquidations")} 
-              className="text-left w-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -574,7 +559,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* APY Stability */}
           <button 
             onClick={() => onSelectTab("rates")} 
-            className="text-left group p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">APY Stability</span>
@@ -599,7 +584,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Capital Flow */}
           <button 
             onClick={() => onSelectTab("activity")} 
-            className="text-left group p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Capital Flow</span>
@@ -624,7 +609,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Rate Model */}
           <button 
             onClick={() => onSelectTab("rates")} 
-            className="text-left group p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Rate Model</span>

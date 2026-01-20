@@ -28,9 +28,9 @@ export const brand = {
   // External links (placeholders for now)
   links: {
     docs: 'https://docs.sui.io/guides/developer/deepbook',
-    twitter: 'https://twitter.com',
+    twitter: 'https://x.com/NeridFinance',
     discord: 'https://discord.com',
-    github: 'https://github.com',
+    github: 'https://github.com/sdelo/nerid-margin-dashboard',
   },
 
   // Copyright

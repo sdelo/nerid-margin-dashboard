@@ -68,8 +68,8 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
     const absoluteElementTop = elementRect.top + window.scrollY;
     
     // Calculate target scroll position to put element near top of viewport
-    // Account for: navbar (~56px) + tab bar (~52px) + section chips (~44px) + some padding (~20px)
-    const totalHeaderHeight = 172;
+    // Account for: navbar (~56px) + context strip (~58px) + tab bar (~52px) + section chips (~44px) + some padding (~20px)
+    const totalHeaderHeight = 190;
     const targetScrollPosition = absoluteElementTop - totalHeaderHeight;
     
     window.scrollTo({
@@ -129,7 +129,7 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
           setIsChipsSticky(!entry.isIntersecting);
         });
       },
-      { threshold: 0, rootMargin: "-60px 0px 0px 0px" }
+      { threshold: 0, rootMargin: "-140px 0px 0px 0px" }
     );
 
     observer.observe(sentinelRef.current);
@@ -154,7 +154,7 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
           });
         },
         // Adjusted rootMargin: less bottom margin so we detect sections when they're at top
-        { threshold: [0.2, 0.4, 0.6], rootMargin: "-180px 0px -40% 0px" }
+        { threshold: [0.2, 0.4, 0.6], rootMargin: "-200px 0px -40% 0px" }
       );
 
       observer.observe(ref.current);
@@ -183,12 +183,12 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Smart Sticky Layer 2: sticks below navbar(56px) + tabs(52px) = 108px */}
+      {/* Section Navigation - Smart Sticky Layer 2: sticks below navbar + context strip + tabs = ~172px */}
       <div
         className={`
-          z-30 -mx-6 px-6 transition-all duration-200
+          z-30 transition-all duration-200
           ${isChipsSticky 
-            ? "sticky top-[116px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md" 
+            ? "sticky top-[166px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md -mx-6 px-6" 
             : "relative pb-3 pt-1"
           }
         `}
