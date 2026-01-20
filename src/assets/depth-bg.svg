@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Subtle sonar ring effect -->
+    <radialGradient id="sonarRing1" cx="50%" cy="40%">
+      <stop offset="0%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="45%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="50%" style="stop-color:#67e8f9;stop-opacity:0.03"/>
+      <stop offset="55%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#67e8f9;stop-opacity:0"/>
+    </radialGradient>
+    
+    <radialGradient id="sonarRing2" cx="50%" cy="40%">
+      <stop offset="0%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="65%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="70%" style="stop-color:#67e8f9;stop-opacity:0.02"/>
+      <stop offset="75%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#67e8f9;stop-opacity:0"/>
+    </radialGradient>
+    
+    <radialGradient id="sonarRing3" cx="50%" cy="40%">
+      <stop offset="0%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="85%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="90%" style="stop-color:#67e8f9;stop-opacity:0.015"/>
+      <stop offset="95%" style="stop-color:#67e8f9;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#67e8f9;stop-opacity:0"/>
+    </radialGradient>
+    
+    <!-- Depth gradient overlay -->
+    <linearGradient id="depthFade" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#020617;stop-opacity:0"/>
+      <stop offset="100%" style="stop-color:#020617;stop-opacity:0.4"/>
+    </linearGradient>
+    
+    <!-- Subtle caustic pattern -->
+    <pattern id="caustics" x="0" y="0" width="200" height="200" patternUnits="userSpaceOnUse">
+      <path d="M100,20 Q120,60 100,100 Q80,140 100,180" stroke="#67e8f9" stroke-width="0.5" fill="none" opacity="0.02"/>
+      <path d="M50,40 Q70,80 50,120 Q30,160 50,200" stroke="#67e8f9" stroke-width="0.5" fill="none" opacity="0.015"/>
+      <path d="M150,0 Q170,40 150,80 Q130,120 150,160" stroke="#67e8f9" stroke-width="0.5" fill="none" opacity="0.02"/>
+    </pattern>
+  </defs>
+  
+  <!-- Base layer - empty, color comes from CSS gradient -->
+  <rect width="100%" height="100%" fill="transparent"/>
+  
+  <!-- Sonar rings emanating from upper center -->
+  <ellipse cx="960" cy="400" rx="1200" ry="800" fill="url(#sonarRing1)"/>
+  <ellipse cx="960" cy="400" rx="1000" ry="650" fill="url(#sonarRing2)"/>
+  <ellipse cx="960" cy="400" rx="700" ry="450" fill="url(#sonarRing3)"/>
+  
+  <!-- Very subtle caustic overlay -->
+  <rect width="100%" height="100%" fill="url(#caustics)" opacity="0.5"/>
+  
+  <!-- Depth fade at bottom -->
+  <rect width="100%" height="100%" fill="url(#depthFade)"/>
+  
+  <!-- Subtle corner vignette -->
+  <radialGradient id="vignette" cx="50%" cy="50%">
+    <stop offset="0%" style="stop-color:#020617;stop-opacity:0"/>
+    <stop offset="70%" style="stop-color:#020617;stop-opacity:0"/>
+    <stop offset="100%" style="stop-color:#020617;stop-opacity:0.3"/>
+  </radialGradient>
+  <rect width="100%" height="100%" fill="url(#vignette)"/>
+</svg>
+
+
+
+
+
+

@@ -1,0 +1,105 @@
+---
+description: SUI blockchain integration patterns and BCS parsing rules
+globs: ["**/*.ts", "**/*.tsx"]
+alwaysApply: true
+---
+
+# SUI Blockchain Integration Rules
+
+## BCS Parsing with Generated Contracts
+
+### Correct Pattern:
+
+```typescript
+import { MarginPool } from "../contracts/deepbook_margin/margin_pool";
+
+// Parse BCS data using generated contract
+const marginPool = MarginPool.fromBase64(bcsData.bcsBytes);
+
+// Type annotation for parsed objects
+marginPool: typeof MarginPool["$inferInput"];
+```
+
+### Data Access Pattern:
+
+```typescript
+// ✅ CORRECT - Access properties directly (no .fields)
+marginPool.state.total_supply;
+marginPool.config.margin_pool_config.supply_cap;
+marginPool.config.interest_config.base_rate;
+
+// ❌ WRONG - Don't add .fields everywhere
+marginPool.state.fields.total_supply;
+marginPool.config.fields.margin_pool_config.fields.supply_cap;
+```
+
+## Decimal Conversion Rules
+
+### Token Amounts (use underlying token decimals):
+
+- SUI: 9 decimals (divide by 1e9)
+- DBUSDC: 6 decimals (divide by 1e6)
+
+```typescript
+function convertFromSmallestUnits(
+  value: string | number | bigint,
+  decimals: number
+): bigint {
+  const divisor = BigInt(10 ** decimals);
+  return BigInt(value) / divisor;
+}
+```
+
+### Config Values (always 9 decimals):
+
+- Interest rates, utilization rates, spreads
+- Example: `900000000` = `0.9` (90%)
+
+```typescript
+function nineDecimalToPercent(nineDecimal: bigint): number {
+  return Number(nineDecimal) / 1_000_000_000;
+}
+```
+
+## Architecture Pattern
+
+```
+usePoolData hook → fetchMarginPool API → transformMarginPoolData utility
+     ↓                    ↓                        ↓
+React state mgmt    BCS parsing & fetching    Data transformation
+```
+
+### Hook Implementation:
+
+```typescript
+export function usePoolData(poolId: string): PoolDataResult {
+  const suiClient = useSuiClient();
+  const [data, setData] = React.useState<PoolOverview | null>(null);
+
+  const fetchData = React.useCallback(async () => {
+    const result = await fetchMarginPool(suiClient, poolId);
+    setData(result);
+  }, [suiClient, poolId]);
+
+  // ... rest of implementation
+}
+```
+
+## Key Technical Notes
+
+- Use `showBcs: true` option with `suiClient.getObject()`
+- MarginPool has `key, store` abilities and can be fetched directly
+- ProtocolConfig is embedded in MarginPool (no `key` ability)
+- Field mappings: `total_supply` → `supply`, `total_borrow` → `borrow`
+- Use `useSuiClientQuery` from `@mysten/dapp-kit` for caching and refetching
+- Pool IDs from `contracts.ts`:
+  - SUI: `0x52fae759e70a7fd35f2a4538589a949ad120dc67fa1bda7bf0b12dcc650b173a`
+  - DBUSDC: `0xfca47443db2177b3e7d93fdb4b3a7d33c3102688419146c9bac2628d735a7545`
+
+## Common Mistakes to Avoid
+
+1. **Don't add `.fields` everywhere** - Access properties directly
+2. **Don't use basis points for 9-decimal values** - Use `nineDecimalToPercent()`
+3. **Don't duplicate data fetching logic** - Use API functions in hooks
+4. **Don't forget decimal conversion** - Token amounts need conversion, config values are 9-decimal
+5. **Don't use `typeof MarginPool`** - Use `typeof MarginPool["$inferInput"]` for parsed objects

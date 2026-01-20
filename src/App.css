@@ -1,0 +1,2 @@
+/* Reset demo styles to rely on Tailwind + theme */
+#root { max-width: none; margin: 0; padding: 0; }

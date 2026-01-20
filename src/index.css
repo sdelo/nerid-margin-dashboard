@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@import "./styles/theme.css";
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  /* Premium typography: DM Sans for UI, with tabular numbers */
+  font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Deep ocean navy - matching Nerid reference */
+  background: linear-gradient(180deg, #0d1a1f 0%, #0a1419 50%, #080f13 100%);
+  background-attachment: fixed;
+  color: white;
+  /* Institutional number styling */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01' on, 'ss02' on;
+  letter-spacing: -0.01em;
+}
+
+/* Monospace numbers for data */
+.font-mono,
+.tabular-nums,
+[data-mono] {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-feature-settings: 'ss01' on;
+}
+
+/* Subtle ambient glow - more refined */
+#root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 100% 80% at 50% -20%, rgba(45, 212, 191, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 100% 100%, rgba(20, 184, 166, 0.02) 0%, transparent 50%);
+  z-index: -1;
+}
+
+/* Transaction Modal Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shrink {
+  from {
+    width: 100%;
+  }
+
+  to {
+    width: 0%;
+  }
+}
+
+/* Pool switch animation */
+@keyframes poolSwitch {
+  0% {
+    opacity: 0.6;
+    transform: translateY(4px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: poolSwitch 0.3s ease-out forwards;
+}
+
+/* Gentle slide-in animation for deposit preview and similar content */
+@keyframes gentleSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: translateY(4px) scale(0.99);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-gentle-slide-in {
+  animation: gentleSlideIn 0.7s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+/* Subtle pulse for preview indicators */
+@keyframes pulseSubtle {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 2s ease-in-out infinite;
+}
+
+/* Pulse ring animation for deposit input CTA */
+@keyframes pulseRing {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1);
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulseRing 2s ease-in-out infinite;
+}
+
+a {
+  text-decoration: none;
+}
