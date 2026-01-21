@@ -85,9 +85,23 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
   const [tileData, setTileData] = React.useState<TileData | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [timeWindow, setTimeWindow] = React.useState<TimeWindow>("7d");
+  
+  // Track whether we've done the initial load to avoid flashing on refreshes
+  const hasLoadedRef = React.useRef(false);
+  const prevPoolIdRef = React.useRef<string | undefined>(undefined);
+  const prevTimeWindowRef = React.useRef<TimeWindow>(timeWindow);
 
   const decimals = pool?.contracts?.coinDecimals ?? 9;
   const poolId = pool?.contracts?.marginPoolId;
+  
+  // Reset loaded state when pool or time window changes (intentional user action)
+  React.useEffect(() => {
+    if (prevPoolIdRef.current !== poolId || prevTimeWindowRef.current !== timeWindow) {
+      hasLoadedRef.current = false;
+      prevPoolIdRef.current = poolId;
+      prevTimeWindowRef.current = timeWindow;
+    }
+  }, [poolId, timeWindow]);
   
   // Safely calculate pool rates with fallback
   const liveRates = React.useMemo(() => {
@@ -107,7 +121,10 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
       if (!poolId) return;
 
       try {
-        setIsLoading(true);
+        // Only show loading skeleton on initial load, not on refreshes
+        if (!hasLoadedRef.current) {
+          setIsLoading(true);
+        }
 
         const timeRange = timeWindow === "7d" ? "7D" : "1M";
         const params = { ...timeRangeToParams(timeRange), margin_pool_id: poolId, limit: 10000 };
@@ -222,6 +239,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
         console.error("Error fetching tile data:", err);
       } finally {
         setIsLoading(false);
+        hasLoadedRef.current = true;
       }
     }
 
@@ -304,7 +322,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           <div className="flex items-center bg-white/[0.03] border border-white/[0.08] rounded-lg p-0.5">
             <button
               onClick={() => setTimeWindow("7d")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
+              className={`cursor-pointer px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
                 timeWindow === "7d"
                   ? "bg-[#2dd4bf]/20 text-[#2dd4bf] border border-[#2dd4bf]/30"
                   : "text-white/40 hover:text-white/60"
@@ -314,7 +332,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
             </button>
             <button
               onClick={() => setTimeWindow("30d")}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
+              className={`cursor-pointer px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
                 timeWindow === "30d"
                   ? "bg-[#2dd4bf]/20 text-[#2dd4bf] border border-[#2dd4bf]/30"
                   : "text-white/40 hover:text-white/60"
@@ -342,7 +360,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           </div>
           <button 
             onClick={() => onSelectTab("risk")}
-            className="text-[10px] text-white/40 hover:text-purple-400 transition-colors"
+            className="cursor-pointer text-[10px] text-white/40 hover:text-purple-400 transition-colors"
           >
             Open Simulator →
           </button>
@@ -353,7 +371,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("concentration")} 
-              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -417,7 +435,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("liquidity")} 
-              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -493,7 +511,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           <div className="relative group/tile h-full">
             <button 
               onClick={() => onSelectTab("liquidations")} 
-              className="text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -549,7 +567,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           </div>
           <button 
             onClick={() => onSelectTab("rates")}
-            className="text-[10px] text-white/40 hover:text-emerald-400 transition-colors"
+            className="cursor-pointer text-[10px] text-white/40 hover:text-emerald-400 transition-colors"
           >
             View Rate Model →
           </button>
@@ -559,7 +577,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* APY Stability */}
           <button 
             onClick={() => onSelectTab("rates")} 
-            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">APY Stability</span>
@@ -584,7 +602,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Capital Flow */}
           <button 
             onClick={() => onSelectTab("activity")} 
-            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Capital Flow</span>
@@ -609,7 +627,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Rate Model */}
           <button 
             onClick={() => onSelectTab("rates")} 
-            className="text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Rate Model</span>
@@ -651,19 +669,19 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
         <span className="text-[10px] text-white/30 uppercase tracking-wider">Explore:</span>
         <button 
           onClick={() => onSelectTab("rates")} 
-          className="px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
+          className="cursor-pointer px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
         >
           Yield & Rates
         </button>
         <button 
           onClick={() => onSelectTab("risk")} 
-          className="px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
+          className="cursor-pointer px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
         >
           Risk & Liquidity
         </button>
         <button 
           onClick={() => onSelectTab("activity")} 
-          className="px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
+          className="cursor-pointer px-3 py-1.5 text-[11px] font-medium bg-white/[0.03] hover:bg-[#2dd4bf]/10 border border-white/[0.06] hover:border-[#2dd4bf]/30 rounded-lg text-white/50 hover:text-[#2dd4bf] transition-all"
         >
           Activity
         </button>

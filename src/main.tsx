@@ -17,6 +17,7 @@ import {
 } from "./config/contracts";
 import { getPersistedNetwork } from "./config/networks";
 import { AppNetworkProvider } from "./context/AppNetworkContext";
+import { StickyHeaderProvider } from "./context/StickyHeaderContext";
 
 function Root() {
   useEffect(() => {
@@ -67,7 +68,9 @@ createRoot(document.getElementById("root")!).render(
             autoConnect
             storageKey="deepdashboard:lastConnectedAccount"
           >
-            <Root />
+            <StickyHeaderProvider>
+              <Root />
+            </StickyHeaderProvider>
           </WalletProvider>
         </AppNetworkProvider>
       </SuiClientProvider>

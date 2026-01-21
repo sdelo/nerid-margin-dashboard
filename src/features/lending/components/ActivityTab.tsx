@@ -6,6 +6,7 @@ import { UnifiedEventFeed } from "./UnifiedEventFeed";
 import { WhaleComposition } from "./WhaleComposition";
 import type { PoolOverview } from "../types";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
+import { useStickyHeader } from "../../../context/StickyHeaderContext";
 
 interface ActivityTabProps {
   pool: PoolOverview;
@@ -32,6 +33,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
   const [activeSection, setActiveSection] = React.useState(initialSection || "supply-withdraw");
   const [isChipsSticky, setIsChipsSticky] = React.useState(false);
   const [flashingSection, setFlashingSection] = React.useState<string | null>(null);
+  const { secondLevelTop, totalStickyHeight } = useStickyHeader();
   
   // Track programmatic navigation to temporarily disable scrollspy
   const isNavigatingRef = React.useRef(false);
@@ -71,9 +73,9 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
     const absoluteElementTop = elementRect.top + window.scrollY;
     
     // Calculate target scroll position to put element near top of viewport
-    // Account for: navbar (~56px) + tab bar (~52px) + section chips (~44px) + some padding (~20px)
-    const totalHeaderHeight = 190;
-    const targetScrollPosition = absoluteElementTop - totalHeaderHeight;
+    // Uses dynamic total sticky height from context + some padding for section chips (~50px)
+    const totalHeaderHeightCalc = totalStickyHeight + 50;
+    const targetScrollPosition = absoluteElementTop - totalHeaderHeightCalc;
     
     window.scrollTo({
       top: Math.max(0, targetScrollPosition),
@@ -122,21 +124,26 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
   };
 
   // Smart sticky: detect when we've scrolled past the sentinel
+  // Uses dynamic header height so it works on all viewport sizes
   React.useEffect(() => {
     if (!sentinelRef.current) return;
 
+    // Root margin uses the total sticky height so chips become sticky
+    // exactly when they would hit the bottom of the sticky headers
+    const rootMarginTop = -(secondLevelTop + 10); // +10px buffer
+    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           setIsChipsSticky(!entry.isIntersecting);
         });
       },
-      { threshold: 0, rootMargin: "-140px 0px 0px 0px" }
+      { threshold: 0, rootMargin: `${rootMarginTop}px 0px 0px 0px` }
     );
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [secondLevelTop]); // Re-create observer when header height changes
 
   // Track active section on scroll using Intersection Observer (scrollspy)
   React.useEffect(() => {
@@ -182,15 +189,16 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Smart Sticky */}
+      {/* Section Navigation - Always sticky, visual changes when stuck */}
       <div
         className={`
-          z-30 transition-all duration-200
+          sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
           ${isChipsSticky 
-            ? "sticky top-[166px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md -mx-6 px-6" 
-            : "relative pb-3 pt-1"
+            ? "bg-[#0d1a1f] border-b border-white/[0.06] shadow-md" 
+            : "bg-[#0d1a1f]"
           }
         `}
+        style={{ top: `${secondLevelTop}px` }}
       >
         <SectionChips
           sections={SECTIONS}
@@ -252,7 +260,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       ═══════════════════════════════════════════════════════════════════ */}
       <section 
         ref={supplyWithdrawRef} 
-        className={`scroll-mt-44 pb-8 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-8 rounded-xl transition-all duration-300 ${
           flashingSection === "supply-withdraw" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""
@@ -266,7 +274,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       ═══════════════════════════════════════════════════════════════════ */}
       <section 
         ref={borrowRepayRef} 
-        className={`scroll-mt-44 pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
           flashingSection === "borrow-repay" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""
@@ -280,7 +288,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       ═══════════════════════════════════════════════════════════════════ */}
       <section 
         ref={eventFeedRef} 
-        className={`scroll-mt-44 pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
           flashingSection === "event-feed" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""
@@ -294,7 +302,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       ═══════════════════════════════════════════════════════════════════ */}
       <section 
         ref={compositionRef} 
-        className={`scroll-mt-44 pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
           flashingSection === "composition" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""

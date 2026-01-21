@@ -9,6 +9,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { NetworkSwitcher } from "../../../components/NetworkSwitcher";
 import { brand } from "../../../config/brand";
+import { useStickyHeader } from "../../../context/StickyHeaderContext";
 
 export default function NavBar() {
   const currentAccount = useCurrentAccount();
@@ -18,6 +19,34 @@ export default function NavBar() {
   const { network } = useSuiClientContext();
   const location = useLocation();
   const settingsRef = React.useRef<HTMLDivElement>(null);
+  const navRef = React.useRef<HTMLElement>(null);
+  const { setNavbarHeight } = useStickyHeader();
+
+  // Measure and report navbar height to context
+  React.useEffect(() => {
+    const element = navRef.current;
+    if (!element) return;
+
+    const updateHeight = () => {
+      const height = element.getBoundingClientRect().height;
+      setNavbarHeight(height);
+    };
+
+    // Initial measurement
+    updateHeight();
+
+    // Set up ResizeObserver for dynamic changes (e.g., content wrapping on mobile)
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(element);
+
+    // Also listen to window resize for orientation changes
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [setNavbarHeight]);
 
   function getShortAddress(address: string): string {
     if (!address) return "";
@@ -36,8 +65,8 @@ export default function NavBar() {
   }, []);
 
   return (
-    <nav className="w-full">
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-3 flex items-center justify-between text-white">
+    <nav ref={navRef} className="w-full">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3 flex items-center justify-between text-white">
         {/* Left: Logo + Nav */}
         <div className="flex items-center gap-8">
           <Link 

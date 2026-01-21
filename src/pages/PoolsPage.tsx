@@ -47,6 +47,8 @@ import {
   buildWithdrawAllTransaction,
 } from "../lib/suiTransactions";
 import { Footer } from "../components/Footer";
+import { useStickyHeader } from "../context/StickyHeaderContext";
+import { usePoolActivityMetrics } from "../features/lending/hooks/usePoolActivityMetrics";
 
 export function PoolsPage() {
   const account = useCurrentAccount();
@@ -74,7 +76,58 @@ export function PoolsPage() {
   // Right rail collapse state
   const [isRailCollapsed, setIsRailCollapsed] = React.useState(false);
 
+  // Sticky header context for dynamic positioning
+  const { navbarHeight, setContextStripHeight } = useStickyHeader();
+  const contextStripRef = React.useRef<HTMLDivElement>(null);
+
+  // Measure context strip height and report to context
+  React.useEffect(() => {
+    const element = contextStripRef.current;
+    if (!element) return;
+
+    const updateHeight = () => {
+      const height = element.getBoundingClientRect().height;
+      setContextStripHeight(height);
+    };
+
+    updateHeight();
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(element);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [setContextStripHeight]);
+
   const { pools, userPositions, isLoading, error: poolsError, refetch: refetchPools } = useAllPools(account?.address);
+
+  // Protocol-level activity metrics for 7d flow
+  const { metrics: poolActivityMetrics } = usePoolActivityMetrics(pools);
+
+  // Compute protocol-level aggregated metrics
+  const protocolMetrics = React.useMemo(() => {
+    if (pools.length === 0) return null;
+
+    // Aggregate TVL and borrowed across all pools
+    const totalTVL = pools.reduce((sum, pool) => sum + (pool.state?.supply || 0), 0);
+    const totalBorrowed = pools.reduce((sum, pool) => sum + (pool.state?.borrow || 0), 0);
+    const utilization = totalTVL > 0 ? (totalBorrowed / totalTVL) * 100 : 0;
+
+    // Sum 7d net flow across all pools
+    let total7dFlow = 0;
+    poolActivityMetrics.forEach((metric) => {
+      total7dFlow += metric.netFlow7d;
+    });
+
+    return {
+      tvl: totalTVL,
+      borrowed: totalBorrowed,
+      utilization,
+      flow7d: total7dFlow,
+    };
+  }, [pools, poolActivityMetrics]);
 
   const userSupplierCapIds: string[] = React.useMemo(() => {
     const capIds = new Set(
@@ -450,7 +503,7 @@ export function PoolsPage() {
         setPoolSwitchToast({
           visible: true,
           asset: newPool.asset,
-          iconUrl: newPool.ui.iconUrl,
+          iconUrl: newPool.ui.iconUrl || undefined,
         });
         // Auto-hide after animation completes
         setTimeout(() => {
@@ -511,7 +564,7 @@ export function PoolsPage() {
                 <div className="min-w-0 space-y-6">
                   {/* Pool Selection + Quick Compare */}
                   <div className="surface-elevated p-4">
-                    {/* Step Indicator + Header */}
+                    {/* Step Indicator + Header + Protocol Topline */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <span className="text-[9px] font-semibold text-[#2dd4bf] bg-[#2dd4bf]/10 px-2 py-1 rounded-full uppercase tracking-wider">
@@ -522,6 +575,60 @@ export function PoolsPage() {
                           <p className="text-xs text-white/50 mt-0.5">Pick a market to supply liquidity</p>
                         </div>
                       </div>
+
+                      {/* Protocol Topline Metrics */}
+                      {protocolMetrics && (
+                        <div className="hidden sm:flex items-center gap-6 bg-white/[0.02] rounded-xl px-5 py-3 border border-white/[0.06]">
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Protocol Topline</span>
+                          <div className="flex items-center gap-6">
+                            <div className="text-center min-w-[60px]">
+                              <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-0.5">TVL</span>
+                              <span className="text-base font-semibold text-white tabular-nums">
+                                ${protocolMetrics.tvl >= 1_000_000 
+                                  ? (protocolMetrics.tvl / 1_000_000).toFixed(1) + 'M'
+                                  : protocolMetrics.tvl >= 1_000 
+                                    ? (protocolMetrics.tvl / 1_000).toFixed(0) + 'k'
+                                    : protocolMetrics.tvl.toFixed(0)
+                                }
+                              </span>
+                            </div>
+                            <div className="w-px h-8 bg-white/[0.08]" />
+                            <div className="text-center min-w-[60px]">
+                              <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-0.5">Borrowed</span>
+                              <span className="text-base font-semibold text-white tabular-nums">
+                                ${protocolMetrics.borrowed >= 1_000_000 
+                                  ? (protocolMetrics.borrowed / 1_000_000).toFixed(1) + 'M'
+                                  : protocolMetrics.borrowed >= 1_000 
+                                    ? (protocolMetrics.borrowed / 1_000).toFixed(0) + 'k'
+                                    : protocolMetrics.borrowed.toFixed(0)
+                                }
+                              </span>
+                            </div>
+                            <div className="w-px h-8 bg-white/[0.08]" />
+                            <div className="text-center min-w-[50px]">
+                              <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-0.5">Util</span>
+                              <span className="text-base font-semibold text-white tabular-nums">
+                                {protocolMetrics.utilization.toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className="w-px h-8 bg-white/[0.08]" />
+                            <div className="text-center min-w-[70px]">
+                              <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-0.5">7d Flow</span>
+                              <span className={`text-base font-semibold tabular-nums ${
+                                protocolMetrics.flow7d >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                              }`}>
+                                {protocolMetrics.flow7d >= 0 ? '+' : ''}
+                                ${Math.abs(protocolMetrics.flow7d) >= 1_000_000 
+                                  ? (Math.abs(protocolMetrics.flow7d) / 1_000_000).toFixed(1) + 'M'
+                                  : Math.abs(protocolMetrics.flow7d) >= 1_000 
+                                    ? (Math.abs(protocolMetrics.flow7d) / 1_000).toFixed(0) + 'k'
+                                    : Math.abs(protocolMetrics.flow7d).toFixed(0)
+                                }
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Pool Pills */}
@@ -586,10 +693,15 @@ export function PoolsPage() {
 
                   {/* ═══════════════════════════════════════════════════════════════
                       STICKY HEADER STACK - Context + Tabs merged
+                      Uses CSS variables for dynamic positioning
                       ═══════════════════════════════════════════════════════════════ */}
-                  <div className="sticky top-[56px] z-40 bg-[#0d1a1f] rounded-lg border border-white/[0.06] overflow-hidden">
+                  <div 
+                    ref={contextStripRef}
+                    className="sticky-second-level rounded-lg border border-white/[0.06]"
+                    style={{ top: `${navbarHeight}px` }}
+                  >
                     {/* Context Strip - Compact */}
-                    <div className="px-3 py-1.5 border-b border-white/[0.04]">
+                    <div className="px-2 sm:px-3 py-1 sm:py-1.5 border-b border-white/[0.04]">
                       <StickyContextStrip
                         pool={selectedPool}
                         pools={pools}
@@ -600,7 +712,7 @@ export function PoolsPage() {
                     
                     {/* Main Tabs - Directly attached */}
                     {overviewTab !== "overview" && (
-                      <div className="px-3 py-1">
+                      <div className="px-2 sm:px-3 py-1">
                         <div className="tab-bar relative">
                           {mainTabs.map((tab) => (
                             <button
@@ -618,7 +730,7 @@ export function PoolsPage() {
 
                   {/* Back button - Subtle, inline with content */}
                   {overviewTab !== "overview" && (
-                    <div ref={detailsRef} className="flex items-center gap-2 pt-4 scroll-mt-32">
+                    <div ref={detailsRef} className="flex items-center gap-2 pt-4 scroll-mt-sticky">
                       <button
                         onClick={() => setOverviewTab("overview")}
                         className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors"
@@ -637,11 +749,11 @@ export function PoolsPage() {
                   
                   {/* Details anchor for overview */}
                   {overviewTab === "overview" && (
-                    <div ref={detailsRef} className="scroll-mt-32" />
+                    <div ref={detailsRef} className="scroll-mt-sticky" />
                   )}
 
-                  {/* Tab Content */}
-                  <div className={`surface-elevated p-6 transition-all duration-300 ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
+                  {/* Tab Content - overflow-visible allows sticky children to work properly */}
+                  <div className={`surface-elevated p-6 transition-all duration-300 overflow-visible ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
                     {overviewTab === "overview" && (
                       <OverviewTiles
                         pool={selectedPool}
@@ -701,7 +813,10 @@ export function PoolsPage() {
                     RIGHT RAIL: Deposit + Portfolio (sticky)
                     ═══════════════════════════════════════════════════════════════ */}
                 {!isRailCollapsed && (
-                  <aside className="sticky top-20 self-start space-y-4 pl-4 hidden lg:block">
+                  <aside 
+                    className="sticky self-start space-y-4 pl-4 hidden lg:block"
+                    style={{ top: `${navbarHeight + 16}px` }}
+                  >
                     <ActionPanel
                       pool={selectedPool}
                       onDeposit={handleDeposit}

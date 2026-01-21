@@ -110,8 +110,8 @@ export const StickyContextStrip: FC<Props> = ({
 
   return (
     <div className="flex items-center gap-3 px-4 py-1.5">
-      {/* Pool Selector - Left Anchor */}
-      <div className="relative" ref={dropdownRef}>
+      {/* Pool Selector - Left Anchor - Outside overflow container for dropdown visibility */}
+      <div className="relative flex-shrink-0 z-50" ref={dropdownRef}>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] transition-all group"
@@ -186,64 +186,67 @@ export const StickyContextStrip: FC<Props> = ({
         )}
       </div>
 
-      {/* Vertical Divider */}
-      <div className="w-px h-6 bg-white/[0.08]" />
+      {/* Scrollable metrics section */}
+      <div className="flex items-center gap-3 overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent min-w-0 flex-1">
+        {/* Vertical Divider */}
+        <div className="w-px h-6 bg-white/[0.08] flex-shrink-0" />
 
-      {/* Snapshot Metrics - Compact inline */}
-      <div className="flex items-center gap-3 flex-1">
-        {/* APY */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-white/40 uppercase tracking-wider">APY</span>
-          <span className="text-sm font-semibold text-[#2dd4bf] font-mono">
-            {Number(pool.ui.aprSupplyPct).toFixed(2)}%
-          </span>
-        </div>
+        {/* Snapshot Metrics - Compact inline */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* APY */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">APY</span>
+            <span className="text-sm font-semibold text-[#2dd4bf] font-mono">
+              {Number(pool.ui.aprSupplyPct).toFixed(2)}%
+            </span>
+          </div>
 
-        <span className="text-white/10">|</span>
+          <span className="text-white/10">|</span>
 
-        {/* Supplied */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-white/40 uppercase tracking-wider">Supplied</span>
-          <span className="text-xs font-medium text-white font-mono">
-            {formatNumber(pool.state.supply)}
-          </span>
-        </div>
+          {/* Supplied */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">Supplied</span>
+            <span className="text-xs font-medium text-white font-mono">
+              {formatNumber(pool.state.supply)}
+            </span>
+          </div>
 
-        <span className="text-white/10">|</span>
+          <span className="text-white/10">|</span>
 
-        {/* Borrowed */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-white/40 uppercase tracking-wider">Borrowed</span>
-          <span className="text-xs font-medium text-amber-400 font-mono">
-            {formatNumber(pool.state.borrow)}
-          </span>
-        </div>
+          {/* Borrowed */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">Borrowed</span>
+            <span className="text-xs font-medium text-amber-400 font-mono">
+              {formatNumber(pool.state.borrow)}
+            </span>
+          </div>
 
-        <span className="text-white/10">|</span>
+          <span className="text-white/10">|</span>
 
-        {/* Available */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-white/40 uppercase tracking-wider">Avail</span>
-          <span className="text-xs font-medium text-emerald-400 font-mono">
-            {formatNumber(available)}
-          </span>
-        </div>
+          {/* Available */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">Avail</span>
+            <span className="text-xs font-medium text-emerald-400 font-mono">
+              {formatNumber(available)}
+            </span>
+          </div>
 
-        <span className="text-white/10">|</span>
+          <span className="text-white/10">|</span>
 
-        {/* Utilization */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] text-white/40 uppercase tracking-wider">Util</span>
-          <span className="text-xs font-medium text-white font-mono">
-            {utilizationPct.toFixed(0)}%
-          </span>
-        </div>
+          {/* Utilization */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">Util</span>
+            <span className="text-xs font-medium text-white font-mono">
+              {utilizationPct.toFixed(0)}%
+            </span>
+          </div>
 
-        {/* Status Badge */}
-        <div
-          className={`px-2 py-0.5 rounded text-[8px] font-semibold tracking-wide ${statusBadge.color}`}
-        >
-          {statusBadge.label}
+          {/* Status Badge */}
+          <div
+            className={`px-2 py-0.5 rounded text-[8px] font-semibold tracking-wide ${statusBadge.color}`}
+          >
+            {statusBadge.label}
+          </div>
         </div>
       </div>
     </div>

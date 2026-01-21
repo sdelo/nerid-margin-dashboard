@@ -4,6 +4,7 @@ import YieldCurve from "./YieldCurve";
 import { APYHistory } from "./APYHistory";
 import { BackedMarketsTab } from "./BackedMarketsTab";
 import type { PoolOverview } from "../types";
+import { useStickyHeader } from "../../../context/StickyHeaderContext";
 
 interface YieldTabProps {
   pool: PoolOverview;
@@ -33,6 +34,7 @@ export function YieldTab({
   const [activeSection, setActiveSection] = React.useState(initialSection || "rates");
   const [isChipsSticky, setIsChipsSticky] = React.useState(false);
   const [flashingSection, setFlashingSection] = React.useState<string | null>(null);
+  const { secondLevelTop, totalStickyHeight } = useStickyHeader();
   
   // Track programmatic navigation to temporarily disable scrollspy
   const isNavigatingRef = React.useRef(false);
@@ -70,8 +72,8 @@ export function YieldTab({
     const absoluteElementTop = elementRect.top + window.scrollY;
     
     // Calculate target scroll position to put element near top of viewport
-    // Account for: navbar (~56px) + tab bar (~52px) + section chips (~44px) + some padding (~20px)
-    const totalHeaderHeight = 190;
+    // Uses dynamic total sticky height from context + some padding for section chips (~50px)
+    const totalHeaderHeight = totalStickyHeight + 50;
     const targetScrollPosition = absoluteElementTop - totalHeaderHeight;
     
     window.scrollTo({
@@ -121,9 +123,14 @@ export function YieldTab({
   };
 
   // Smart sticky: detect when we've scrolled past the sentinel
+  // Uses dynamic header height so it works on all viewport sizes
   React.useEffect(() => {
     if (!sentinelRef.current) return;
 
+    // Root margin uses the total sticky height so chips become sticky
+    // exactly when they would hit the bottom of the sticky headers
+    const rootMarginTop = -(secondLevelTop + 10); // +10px buffer
+    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -131,12 +138,12 @@ export function YieldTab({
           setIsChipsSticky(!entry.isIntersecting);
         });
       },
-      { threshold: 0, rootMargin: "-140px 0px 0px 0px" }
+      { threshold: 0, rootMargin: `${rootMarginTop}px 0px 0px 0px` }
     );
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [secondLevelTop]); // Re-create observer when header height changes
 
   // Track active section on scroll using Intersection Observer (scrollspy)
   React.useEffect(() => {
@@ -171,15 +178,16 @@ export function YieldTab({
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Smart Sticky Layer 2: sticks below navbar(56px) + tabs(52px) = 108px */}
+      {/* Section Navigation - Always sticky, visual changes when stuck */}
       <div
         className={`
-          z-30 transition-all duration-200
+          sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
           ${isChipsSticky 
-            ? "sticky top-[166px] py-1.5 bg-[#0d1a1f] backdrop-blur-xl border-b border-white/[0.06] shadow-md -mx-6 px-6" 
-            : "relative pb-3 pt-1"
+            ? "bg-[#0d1a1f] border-b border-white/[0.06] shadow-md" 
+            : "bg-[#0d1a1f]"
           }
         `}
+        style={{ top: `${secondLevelTop}px` }}
       >
         <SectionChips
           sections={SECTIONS}
@@ -192,7 +200,7 @@ export function YieldTab({
       {/* SECTION: Rate Model */}
       <section 
         ref={ratesRef} 
-        className={`scroll-mt-44 pb-6 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
           flashingSection === "rates" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""
@@ -204,7 +212,7 @@ export function YieldTab({
       {/* SECTION: APY History */}
       <section 
         ref={historyRef} 
-        className={`scroll-mt-44 pb-6 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
           flashingSection === "history" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""
@@ -216,7 +224,7 @@ export function YieldTab({
       {/* SECTION: Markets / Deployment */}
       <section 
         ref={marketsRef} 
-        className={`scroll-mt-44 pb-4 rounded-xl transition-all duration-300 ${
+        className={`scroll-mt-sticky pb-4 rounded-xl transition-all duration-300 ${
           flashingSection === "markets" 
             ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
             : ""

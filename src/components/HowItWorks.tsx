@@ -9,10 +9,10 @@ export function HowItWorks() {
         </h2>
         
         <p className="text-lg text-white/80 text-center max-w-2xl mx-auto mb-12">
-          You deposit SUI or DBUSDC into a margin pool. Traders borrow your assets 
+          You deposit assets into a margin pool. Traders borrow your assets 
           to make leveraged trades on DeepBook. They pay interest on what they borrow, 
-          and that interest goes directly to you. Withdraw your funds whenever you want
-          — no lockup period.
+          and that interest goes directly to you. No fixed lockup — withdrawals 
+          depend on available pool liquidity.
         </p>
 
         {/* Flow Diagram */}
@@ -22,7 +22,7 @@ export function HowItWorks() {
             <FlowStep 
               number="1" 
               title="You Deposit" 
-              description="Add SUI or DBUSDC to the pool"
+              description="Add assets to the pool"
               icon={<DepositIcon />}
             />
             <FlowArrow />
@@ -53,7 +53,7 @@ export function HowItWorks() {
             <FlowStep 
               number="1" 
               title="You Deposit" 
-              description="Add SUI or DBUSDC to the pool"
+              description="Add assets to the pool"
               icon={<DepositIcon />}
               horizontal
             />
@@ -88,7 +88,7 @@ export function HowItWorks() {
         <div className="mt-8 text-center">
           <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white/70 text-sm">
             <WithdrawIcon />
-            Withdraw anytime — no lockup
+            No fixed lockup — withdrawals subject to pool liquidity
           </span>
         </div>
       </div>
