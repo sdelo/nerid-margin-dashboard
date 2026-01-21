@@ -757,11 +757,9 @@ export function PoolsPage() {
                     <div ref={detailsRef} className="scroll-mt-sticky" />
                   )}
 
-                  {/* Tab Content - overflow-visible allows sticky children to work properly */}
-                  <div className={`surface-elevated transition-all duration-300 overflow-visible ${
-                    overviewTab === "overview" ? "p-6" : "pt-0 px-6 pb-6"
-                  } ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
-                    {overviewTab === "overview" && (
+                  {/* Tab Content - Overview gets card wrapper, other tabs render outside to allow sticky to work */}
+                  {overviewTab === "overview" && (
+                    <div className={`surface-elevated p-6 transition-all duration-300 ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
                       <OverviewTiles
                         pool={selectedPool}
                         onSelectTab={(tab) => {
@@ -784,28 +782,30 @@ export function PoolsPage() {
                           }
                         }}
                       />
-                    )}
-                    {overviewTab === "yield" && (
-                      <YieldTab
-                        pool={selectedPool}
-                        pools={pools}
-                        initialSection={initialSection}
-                        onMarketClick={(id) => {
-                          setDeepbookPoolHistoryPoolId(id);
-                          setDeepbookPoolHistoryOpen(true);
-                        }}
-                      />
-                    )}
-                    {overviewTab === "risk" && (
-                      <RiskTab pool={selectedPool} initialSection={initialSection} />
-                    )}
-                    {overviewTab === "activity" && (
-                      <ActivityTab pool={selectedPool} initialSection={initialSection} />
-                    )}
-                    {overviewTab === "howItWorks" && (
+                    </div>
+                  )}
+                  {overviewTab === "yield" && (
+                    <YieldTab
+                      pool={selectedPool}
+                      pools={pools}
+                      initialSection={initialSection}
+                      onMarketClick={(id) => {
+                        setDeepbookPoolHistoryPoolId(id);
+                        setDeepbookPoolHistoryOpen(true);
+                      }}
+                    />
+                  )}
+                  {overviewTab === "risk" && (
+                    <RiskTab pool={selectedPool} initialSection={initialSection} />
+                  )}
+                  {overviewTab === "activity" && (
+                    <ActivityTab pool={selectedPool} initialSection={initialSection} />
+                  )}
+                  {overviewTab === "howItWorks" && (
+                    <div className="surface-elevated p-6">
                       <HowItWorksPanel />
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* ═══════════════════════════════════════════════════════════════

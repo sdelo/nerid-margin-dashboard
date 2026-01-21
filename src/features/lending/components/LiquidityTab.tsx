@@ -373,7 +373,7 @@ export function LiquidityTab({ pool }: LiquidityTabProps) {
 
       {/* Chart */}
       <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-        {isLoading ? (
+        {isLoading && dailyData.length === 0 ? (
           <div className="h-64 flex items-center justify-center">
             <div className="flex items-center gap-3 text-slate-400">
               <div className="w-5 h-5 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />

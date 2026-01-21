@@ -190,10 +190,10 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Always sticky, visual changes when stuck */}
+      {/* Section Navigation - Sticky at viewport level (outside any card container) */}
       <div
         className={`
-          sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
+          sticky z-30 transition-all duration-200 py-2
           ${isChipsSticky 
             ? "bg-[#0d1a1f]/98 border-b border-white/[0.06] shadow-md backdrop-blur-md" 
             : "bg-[#0d1a1f]"
@@ -209,103 +209,106 @@ export function RiskTab({ pool, initialSection }: RiskTabProps) {
         />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION: Risk Overview
-      ═══════════════════════════════════════════════════════════════════ */}
-      <section 
-        ref={overviewRef} 
-        className={`scroll-mt-sticky pb-8 rounded-xl transition-all duration-300 ${
-          flashingSection === "overview" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        {/* Quick Summary Strip */}
-        <div className="flex items-center gap-4 p-3 mb-4 bg-gradient-to-r from-slate-800/60 to-transparent rounded-xl border border-slate-700/30">
-          <div className="flex-1 flex items-center gap-6">
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                Available
-              </span>
-              <div className="text-lg font-bold text-cyan-400 font-mono">
-                {availableLiquidity >= 1e6
-                  ? `${(availableLiquidity / 1e6).toFixed(1)}M`
-                  : availableLiquidity >= 1e3
-                    ? `${(availableLiquidity / 1e3).toFixed(0)}K`
-                    : availableLiquidity.toFixed(0)}
-                <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+      {/* Section content wrapped in card for visual styling */}
+      <div className="surface-elevated px-6 pb-6 pt-4 mt-2">
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Risk Overview
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={overviewRef} 
+          className={`scroll-mt-sticky pb-8 rounded-xl transition-all duration-300 ${
+            flashingSection === "overview" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          {/* Quick Summary Strip */}
+          <div className="flex items-center gap-4 p-3 mb-4 bg-gradient-to-r from-slate-800/60 to-transparent rounded-xl border border-slate-700/30">
+            <div className="flex-1 flex items-center gap-6">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Available
+                </span>
+                <div className="text-lg font-bold text-cyan-400 font-mono">
+                  {availableLiquidity >= 1e6
+                    ? `${(availableLiquidity / 1e6).toFixed(1)}M`
+                    : availableLiquidity >= 1e3
+                      ? `${(availableLiquidity / 1e3).toFixed(0)}K`
+                      : availableLiquidity.toFixed(0)}
+                  <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+                </div>
               </div>
-            </div>
-            <div className="w-px h-8 bg-slate-700/50" />
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                Utilization
-              </span>
-              <div className={`text-lg font-bold font-mono ${getUtilizationColor(utilization)}`}>
-                {utilization.toFixed(1)}%
+              <div className="w-px h-8 bg-slate-700/50" />
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Utilization
+                </span>
+                <div className={`text-lg font-bold font-mono ${getUtilizationColor(utilization)}`}>
+                  {utilization.toFixed(1)}%
+                </div>
               </div>
-            </div>
-            <div className="w-px h-8 bg-slate-700/50" />
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-                Total Supply
-              </span>
-              <div className="text-lg font-bold text-white font-mono">
-                {pool.state.supply >= 1e6
-                  ? `${(pool.state.supply / 1e6).toFixed(1)}M`
-                  : pool.state.supply >= 1e3
-                    ? `${(pool.state.supply / 1e3).toFixed(0)}K`
-                    : pool.state.supply.toFixed(0)}
+              <div className="w-px h-8 bg-slate-700/50" />
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Total Supply
+                </span>
+                <div className="text-lg font-bold text-white font-mono">
+                  {pool.state.supply >= 1e6
+                    ? `${(pool.state.supply / 1e6).toFixed(1)}M`
+                    : pool.state.supply >= 1e3
+                      ? `${(pool.state.supply / 1e3).toFixed(0)}K`
+                      : pool.state.supply.toFixed(0)}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <PoolRiskOutlook pool={pool} />
-      </section>
+          <PoolRiskOutlook pool={pool} />
+        </section>
 
-      {/* SECTION: Liquidity */}
-      <section 
-        ref={liquidityRef} 
-        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "liquidity" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <LiquidityTab pool={pool} />
-      </section>
+        {/* SECTION: Liquidity */}
+        <section 
+          ref={liquidityRef} 
+          className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "liquidity" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <LiquidityTab pool={pool} />
+        </section>
 
-      {/* SECTION: Concentration */}
-      <section 
-        ref={concentrationRef} 
-        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "concentration" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <WhaleWatch
-          poolId={pool.contracts?.marginPoolId}
-          decimals={pool.contracts?.coinDecimals}
-          asset={pool.asset}
-        />
-      </section>
+        {/* SECTION: Concentration */}
+        <section 
+          ref={concentrationRef} 
+          className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "concentration" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <WhaleWatch
+            poolId={pool.contracts?.marginPoolId}
+            decimals={pool.contracts?.coinDecimals}
+            asset={pool.asset}
+          />
+        </section>
 
-      {/* SECTION: Liquidations */}
-      <section 
-        ref={liquidationsRef} 
-        className={`scroll-mt-sticky pb-4 rounded-xl transition-all duration-300 ${
-          flashingSection === "liquidations" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <LiquidationWall
-          poolId={pool.contracts?.marginPoolId}
-          asset={pool.asset}
-        />
-      </section>
+        {/* SECTION: Liquidations */}
+        <section 
+          ref={liquidationsRef} 
+          className={`scroll-mt-sticky pb-4 rounded-xl transition-all duration-300 ${
+            flashingSection === "liquidations" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <LiquidationWall
+            poolId={pool.contracts?.marginPoolId}
+            asset={pool.asset}
+          />
+        </section>
+      </div>
     </div>
   );
 }

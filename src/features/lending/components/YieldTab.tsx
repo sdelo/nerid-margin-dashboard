@@ -178,10 +178,10 @@ export function YieldTab({
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Always sticky, visual changes when stuck */}
+      {/* Section Navigation - Sticky at viewport level (outside any card container) */}
       <div
         className={`
-          sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
+          sticky z-30 transition-all duration-200 py-2
           ${isChipsSticky 
             ? "bg-[#0d1a1f]/98 border-b border-white/[0.06] shadow-md backdrop-blur-md" 
             : "bg-[#0d1a1f]"
@@ -197,45 +197,48 @@ export function YieldTab({
         />
       </div>
 
-      {/* SECTION: Rate Model */}
-      <section 
-        ref={ratesRef} 
-        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "rates" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <YieldCurve pool={pool} />
-      </section>
+      {/* Section content wrapped in card for visual styling */}
+      <div className="surface-elevated px-6 pb-6 pt-4 mt-2">
+        {/* SECTION: Rate Model */}
+        <section 
+          ref={ratesRef} 
+          className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "rates" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <YieldCurve pool={pool} />
+        </section>
 
-      {/* SECTION: APY History */}
-      <section 
-        ref={historyRef} 
-        className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "history" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <APYHistory pool={pool} />
-      </section>
+        {/* SECTION: APY History */}
+        <section 
+          ref={historyRef} 
+          className={`scroll-mt-sticky pb-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "history" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <APYHistory pool={pool} />
+        </section>
 
-      {/* SECTION: Markets / Deployment */}
-      <section 
-        ref={marketsRef} 
-        className={`scroll-mt-sticky pb-4 rounded-xl transition-all duration-300 ${
-          flashingSection === "markets" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <BackedMarketsTab
-          pool={pool}
-          pools={pools}
-          onMarketClick={onMarketClick}
-        />
-      </section>
+        {/* SECTION: Markets / Deployment */}
+        <section 
+          ref={marketsRef} 
+          className={`scroll-mt-sticky pb-4 rounded-xl transition-all duration-300 ${
+            flashingSection === "markets" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <BackedMarketsTab
+            pool={pool}
+            pools={pools}
+            onMarketClick={onMarketClick}
+          />
+        </section>
+      </div>
     </div>
   );
 }

@@ -86,6 +86,16 @@
   box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.3);
 }
 
+/* Elevated card without backdrop-filter - allows sticky children to work properly.
+   backdrop-filter creates a new containing block that breaks sticky positioning. */
+.surface-elevated-no-filter {
+  background: linear-gradient(180deg, rgba(22, 40, 50, 0.85) 0%, rgba(17, 32, 42, 0.8) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.3);
+  /* No backdrop-filter to avoid creating a containing block for sticky elements */
+}
+
 /* Premium card - Hero sections, CTAs */
 .surface-premium {
   background: linear-gradient(180deg, rgba(20, 40, 52, 0.85) 0%, rgba(15, 32, 42, 0.75) 100%);

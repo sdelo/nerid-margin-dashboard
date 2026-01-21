@@ -6,6 +6,7 @@ import { ProtocolProofSection } from "./ProtocolProofSection";
 import { TransactionDetailsModal } from "../../../components/TransactionButton/TransactionDetailsModal";
 import { CONTRACTS } from "../../../config/contracts";
 import { useSuiClientContext } from "@mysten/dapp-kit";
+import { ScenarioProvider } from "../../../context/ScenarioContext";
 
 /**
  * Unified Liquidation Center
@@ -113,6 +114,7 @@ export function LiquidationDashboard() {
   } : null;
 
   return (
+    <ScenarioProvider>
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* ═══════════════════════════════════════════════════════════════════
           PAGE HEADER - Title, description, live indicator
@@ -401,5 +403,6 @@ export function LiquidationDashboard() {
         />
       )}
     </div>
+    </ScenarioProvider>
   );
 }

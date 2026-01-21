@@ -189,10 +189,10 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
       {/* Sentinel element: when this scrolls out of view, chips become sticky */}
       <div ref={sentinelRef} className="h-0" aria-hidden="true" />
 
-      {/* Section Navigation - Always sticky, visual changes when stuck */}
+      {/* Section Navigation - Sticky at viewport level (outside any card container) */}
       <div
         className={`
-          sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
+          sticky z-30 transition-all duration-200 py-2
           ${isChipsSticky 
             ? "bg-[#0d1a1f]/98 border-b border-white/[0.06] shadow-md backdrop-blur-md" 
             : "bg-[#0d1a1f]"
@@ -208,108 +208,111 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
         />
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          Quick Summary Strip
-      ═══════════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center gap-4 p-3 mb-4 bg-gradient-to-r from-slate-800/60 to-transparent rounded-xl border border-slate-700/30">
-        <div className="flex-1 flex items-center gap-6">
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              TVL
-            </span>
-            <div className="text-lg font-bold text-cyan-400 font-mono">
-              {formatNumber(pool.state.supply)}
-              <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+      {/* Section content wrapped in card for visual styling */}
+      <div className="surface-elevated px-6 pb-6 pt-4 mt-2">
+        {/* ═══════════════════════════════════════════════════════════════════
+            Quick Summary Strip
+        ═══════════════════════════════════════════════════════════════════ */}
+        <div className="flex items-center gap-4 p-3 mb-4 bg-gradient-to-r from-slate-800/60 to-transparent rounded-xl border border-slate-700/30">
+          <div className="flex-1 flex items-center gap-6">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                TVL
+              </span>
+              <div className="text-lg font-bold text-cyan-400 font-mono">
+                {formatNumber(pool.state.supply)}
+                <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+              </div>
             </div>
-          </div>
-          <div className="w-px h-8 bg-slate-700/50" />
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Borrowed
-            </span>
-            <div className="text-lg font-bold text-amber-400 font-mono">
-              {formatNumber(pool.state.borrow)}
-              <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+            <div className="w-px h-8 bg-slate-700/50" />
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                Borrowed
+              </span>
+              <div className="text-lg font-bold text-amber-400 font-mono">
+                {formatNumber(pool.state.borrow)}
+                <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
+              </div>
             </div>
-          </div>
-          <div className="w-px h-8 bg-slate-700/50" />
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Utilization
-            </span>
-            <div className={`text-lg font-bold font-mono ${
-              utilization > 80 ? "text-red-400" : utilization > 50 ? "text-amber-400" : "text-emerald-400"
-            }`}>
-              {utilization.toFixed(1)}%
+            <div className="w-px h-8 bg-slate-700/50" />
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                Utilization
+              </span>
+              <div className={`text-lg font-bold font-mono ${
+                utilization > 80 ? "text-red-400" : utilization > 50 ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {utilization.toFixed(1)}%
+              </div>
             </div>
-          </div>
-          <div className="w-px h-8 bg-slate-700/50" />
-          <div>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-              Available
-            </span>
-            <div className="text-lg font-bold text-white font-mono">
-              {formatNumber(pool.state.supply - pool.state.borrow)}
+            <div className="w-px h-8 bg-slate-700/50" />
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+                Available
+              </span>
+              <div className="text-lg font-bold text-white font-mono">
+                {formatNumber(pool.state.supply - pool.state.borrow)}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Supply & Withdraw Activity
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={supplyWithdrawRef} 
+          className={`scroll-mt-sticky pb-8 rounded-xl transition-all duration-300 ${
+            flashingSection === "supply-withdraw" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <PoolActivity pool={pool} />
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Borrow & Repay Activity
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={borrowRepayRef} 
+          className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "borrow-repay" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <BorrowRepayActivity pool={pool} />
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Unified Event Feed
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={eventFeedRef} 
+          className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "event-feed" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <UnifiedEventFeed pool={pool} />
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Whale & Composition
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={compositionRef} 
+          className={`scroll-mt-sticky pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "composition" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <WhaleComposition pool={pool} />
+        </section>
       </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION: Supply & Withdraw Activity
-      ═══════════════════════════════════════════════════════════════════ */}
-      <section 
-        ref={supplyWithdrawRef} 
-        className={`scroll-mt-sticky pb-8 rounded-xl transition-all duration-300 ${
-          flashingSection === "supply-withdraw" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <PoolActivity pool={pool} />
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION: Borrow & Repay Activity
-      ═══════════════════════════════════════════════════════════════════ */}
-      <section 
-        ref={borrowRepayRef} 
-        className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "borrow-repay" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <BorrowRepayActivity pool={pool} />
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION: Unified Event Feed
-      ═══════════════════════════════════════════════════════════════════ */}
-      <section 
-        ref={eventFeedRef} 
-        className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "event-feed" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <UnifiedEventFeed pool={pool} />
-      </section>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION: Whale & Composition
-      ═══════════════════════════════════════════════════════════════════ */}
-      <section 
-        ref={compositionRef} 
-        className={`scroll-mt-sticky pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
-          flashingSection === "composition" 
-            ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
-            : ""
-        }`}
-      >
-        <WhaleComposition pool={pool} />
-      </section>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { type AtRiskPosition, type RiskDistributionBucket } from '../../../hooks/useAtRiskPositions';
 import { StressCurveChart } from './StressCurveChart';
+import { useScenario, simulatePositionAtShock } from '../../../context/ScenarioContext';
 
 interface LiquidationAnalyticsProps {
   positions: AtRiskPosition[];
@@ -9,6 +10,7 @@ interface LiquidationAnalyticsProps {
 }
 
 type HistogramMode = 'count' | 'dollar';
+type HistogramTimeMode = 'now' | 'atShock';
 
 /**
  * Simulate positions at a given price change
@@ -52,25 +54,80 @@ function formatUsd(value: number): string {
 }
 
 /**
- * Risk Distribution Histogram Component
+ * Calculate risk distribution at a shock level
+ */
+function calculateShockedRiskDistribution(
+  positions: AtRiskPosition[],
+  shockPct: number,
+  shockAsset: 'SUI' | 'DEEP' | 'ALL'
+): RiskDistributionBucket[] {
+  const buckets: RiskDistributionBucket[] = [
+    { label: '< 1.05', minRatio: 0, maxRatio: 1.05, count: 0, totalDebtUsd: 0, color: '#fb7185' },
+    { label: '1.05-1.10', minRatio: 1.05, maxRatio: 1.10, count: 0, totalDebtUsd: 0, color: '#fbbf24' },
+    { label: '1.10-1.20', minRatio: 1.10, maxRatio: 1.20, count: 0, totalDebtUsd: 0, color: '#fcd34d' },
+    { label: '1.20-1.50', minRatio: 1.20, maxRatio: 1.50, count: 0, totalDebtUsd: 0, color: '#2dd4bf' },
+    { label: '1.50+', minRatio: 1.50, maxRatio: Infinity, count: 0, totalDebtUsd: 0, color: '#22d3ee' },
+  ];
+
+  positions.forEach(position => {
+    const simulation = simulatePositionAtShock(position, shockPct, shockAsset);
+    const newRiskRatio = simulation.simulatedHealthFactor;
+    
+    const bucket = buckets.find(
+      b => newRiskRatio >= b.minRatio && newRiskRatio < b.maxRatio
+    );
+    if (bucket) {
+      bucket.count++;
+      // Estimate new debt value
+      const shouldShockBase = shockAsset === 'ALL' || shockAsset === position.baseAssetSymbol;
+      const basePriceMultiplier = shouldShockBase ? 1 + shockPct / 100 : 1;
+      const newDebtUsd = position.baseDebtUsd * basePriceMultiplier + position.quoteDebtUsd;
+      bucket.totalDebtUsd += newDebtUsd;
+    }
+  });
+
+  return buckets;
+}
+
+/**
+ * Risk Distribution Histogram Component with Now/At Shock toggle
  */
 function RiskDistributionHistogram({
   riskDistribution,
+  positions,
   histogramMode,
   onModeChange,
   totalPositions,
 }: {
   riskDistribution: RiskDistributionBucket[];
+  positions: AtRiskPosition[];
   histogramMode: HistogramMode;
   onModeChange: (mode: HistogramMode) => void;
   totalPositions: number;
 }) {
-  const maxCount = Math.max(...riskDistribution.map(b => b.count), 1);
-  const maxDebt = Math.max(...riskDistribution.map(b => b.totalDebtUsd), 1);
+  const { isActive, shockPct, shockAsset } = useScenario();
+  const [timeMode, setTimeMode] = React.useState<HistogramTimeMode>('now');
+
+  // Calculate shocked distribution
+  const shockedDistribution = React.useMemo(() => {
+    if (!isActive || shockPct === 0) return null;
+    return calculateShockedRiskDistribution(positions, shockPct, shockAsset);
+  }, [positions, isActive, shockPct, shockAsset]);
+
+  // Use appropriate distribution based on time mode
+  const displayDistribution = timeMode === 'atShock' && shockedDistribution 
+    ? shockedDistribution 
+    : riskDistribution;
+
+  const maxCount = Math.max(...displayDistribution.map(b => b.count), 1);
+  const maxDebt = Math.max(...displayDistribution.map(b => b.totalDebtUsd), 1);
+
+  // For overlay comparison
+  const nowDistribution = riskDistribution;
 
   return (
     <div className="bg-white/[0.02] rounded-xl border border-white/[0.06] p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -80,9 +137,40 @@ function RiskDistributionHistogram({
           </h3>
           <p className="text-xs text-white/40 mt-0.5">
             {totalPositions} total positions · Grouped by health factor
+            {timeMode === 'atShock' && isActive && (
+              <span className="text-rose-300 ml-1">
+                (at {shockPct > 0 ? '+' : ''}{shockPct}% shock)
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Now / At Shock Toggle */}
+          {isActive && shockPct !== 0 && (
+            <div className="flex bg-white/10 rounded-lg p-0.5 mr-2">
+              <button
+                onClick={() => setTimeMode('now')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                  timeMode === 'now' 
+                    ? 'bg-teal-500 text-slate-900' 
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                Now
+              </button>
+              <button
+                onClick={() => setTimeMode('atShock')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                  timeMode === 'atShock' 
+                    ? 'bg-rose-500 text-white' 
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                At Shock
+              </button>
+            </div>
+          )}
+          
           {/* Count ↔ $ Toggle */}
           <div className="flex bg-white/10 rounded-lg p-0.5">
             <button
@@ -111,10 +199,17 @@ function RiskDistributionHistogram({
 
       {/* Histogram Bars */}
       <div className="flex items-end gap-2 h-40">
-        {riskDistribution.map((bucket, idx) => {
+        {displayDistribution.map((bucket, idx) => {
           const value = histogramMode === 'count' ? bucket.count : bucket.totalDebtUsd;
           const maxValue = histogramMode === 'count' ? maxCount : maxDebt;
           const heightPct = value > 0 ? Math.max((value / maxValue) * 100, 8) : 4;
+          
+          // Get "now" value for comparison overlay
+          const nowBucket = nowDistribution[idx];
+          const nowValue = histogramMode === 'count' ? nowBucket?.count : nowBucket?.totalDebtUsd;
+          const nowHeightPct = nowValue && nowValue > 0 
+            ? Math.max((nowValue / maxValue) * 100, 8) 
+            : 0;
           
           return (
             <div
@@ -122,9 +217,21 @@ function RiskDistributionHistogram({
               className="flex-1 group relative h-full flex flex-col justify-end"
               title={`${bucket.count} positions · ${formatUsd(bucket.totalDebtUsd)} · ${bucket.label}`}
             >
+              {/* Comparison outline (now) when viewing at shock */}
+              {timeMode === 'atShock' && shockedDistribution && nowValue && nowValue > 0 && (
+                <div
+                  className="absolute bottom-0 left-0 right-0 border-2 border-dashed rounded-t transition-all opacity-40"
+                  style={{
+                    height: `${nowHeightPct}%`,
+                    borderColor: nowBucket?.color || '#fff',
+                    minHeight: '8px',
+                  }}
+                />
+              )}
+              
               {/* Bar */}
               <div
-                className="w-full rounded-t transition-all group-hover:brightness-125"
+                className="w-full rounded-t transition-all group-hover:brightness-125 relative z-10"
                 style={{
                   height: `${heightPct}%`,
                   backgroundColor: bucket.color,
@@ -133,17 +240,22 @@ function RiskDistributionHistogram({
               />
               
               {/* Hover tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                 <div className="bg-slate-900 border border-white/20 rounded-lg px-3 py-2 text-[10px] whitespace-nowrap shadow-xl">
                   <div className="font-semibold text-white">{bucket.count} positions</div>
                   <div className="text-teal-400">{formatUsd(bucket.totalDebtUsd)} debt</div>
                   <div className="text-white/60 mt-1">{bucket.label}</div>
+                  {timeMode === 'atShock' && nowBucket && (
+                    <div className="text-white/40 mt-1 pt-1 border-t border-white/10">
+                      Was: {nowBucket.count} positions
+                    </div>
+                  )}
                 </div>
               </div>
               
               {/* Count label on bar */}
               {value > 0 && (
-                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-bold text-white drop-shadow-lg">
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] font-bold text-white drop-shadow-lg z-10">
                   {histogramMode === 'count' ? bucket.count : formatUsd(bucket.totalDebtUsd)}
                 </div>
               )}
@@ -154,7 +266,7 @@ function RiskDistributionHistogram({
 
       {/* X-axis Labels */}
       <div className="flex gap-2 mt-3">
-        {riskDistribution.map((bucket, idx) => (
+        {displayDistribution.map((bucket, idx) => (
           <div key={idx} className="flex-1 text-center text-[10px] text-white/50 font-mono">
             {bucket.label}
           </div>
@@ -162,7 +274,7 @@ function RiskDistributionHistogram({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-4 mt-4 text-xs">
+      <div className="flex items-center justify-center gap-4 mt-4 text-xs flex-wrap">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" />
           <span className="text-white/50">Liquidatable</span>
@@ -179,7 +291,29 @@ function RiskDistributionHistogram({
           <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
           <span className="text-white/50">Safe</span>
         </div>
+        {timeMode === 'atShock' && shockedDistribution && (
+          <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/10">
+            <span className="w-2.5 h-2.5 rounded-sm border-2 border-dashed border-white/40" />
+            <span className="text-white/40">Before shock</span>
+          </div>
+        )}
       </div>
+      
+      {/* Migration summary when showing shock */}
+      {timeMode === 'atShock' && shockedDistribution && (
+        <div className="mt-4 p-3 bg-rose-500/5 rounded-lg border border-rose-500/20">
+          <div className="text-[10px] text-rose-300">
+            At {shockPct > 0 ? '+' : ''}{shockPct}% shock: 
+            <span className="font-semibold ml-1">
+              {shockedDistribution[0].count - nowDistribution[0].count > 0 
+                ? `+${shockedDistribution[0].count - nowDistribution[0].count}` 
+                : shockedDistribution[0].count - nowDistribution[0].count
+              } positions
+            </span>
+            {' '}move into liquidatable zone
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -393,10 +527,11 @@ export function LiquidationAnalytics({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <div className="space-y-6">
       {/* Risk Distribution Histogram */}
       <RiskDistributionHistogram
         riskDistribution={riskDistribution}
+        positions={positions}
         histogramMode={histogramMode}
         onModeChange={setHistogramMode}
         totalPositions={positions.length}

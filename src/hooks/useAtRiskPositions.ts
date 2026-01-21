@@ -97,7 +97,7 @@ function pythPriceToUsd(
  */
 export function useAtRiskPositions(
   deepbookPoolId?: string,
-  maxRiskRatio: number = 2.0  // Default: fetch positions up to 2x risk ratio
+  maxRiskRatio: number = 10.0  // Default: fetch all positions (highest observed ~6x)
 ): AtRiskPositionsResult {
   const { serverUrl } = useAppNetwork();
   
@@ -109,12 +109,18 @@ export function useAtRiskPositions(
   const [error, setError] = React.useState<Error | null>(null);
   const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
 
+  // Track if this is the initial fetch (vs a refresh)
+  const hasInitialDataRef = React.useRef(false);
+
   const fetchData = React.useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      // Clear old data immediately when fetching (handles network switch)
-      setPositions([]);
+      // Only clear data on initial fetch or error recovery - not on refreshes
+      // This prevents chart blinking when data updates on interval
+      if (!hasInitialDataRef.current) {
+        setPositions([]);
+      }
 
       // Fetch margin manager states with risk ratio filter
       const states = await fetchMarginManagerStates({
@@ -230,6 +236,7 @@ export function useAtRiskPositions(
 
       setPositions(processed);
       setLastUpdated(new Date());
+      hasInitialDataRef.current = true;
     } catch (err) {
       console.error('Error fetching at-risk positions:', err);
       setError(err as Error);
@@ -237,6 +244,12 @@ export function useAtRiskPositions(
       setIsLoading(false);
     }
   }, [deepbookPoolId, maxRiskRatio, serverUrl]);
+
+  // Reset initial data flag when network/pool changes (requires fresh fetch)
+  React.useEffect(() => {
+    hasInitialDataRef.current = false;
+    setPositions([]);
+  }, [serverUrl, deepbookPoolId]);
 
   // Initial fetch and refetch on dependency changes
   React.useEffect(() => {

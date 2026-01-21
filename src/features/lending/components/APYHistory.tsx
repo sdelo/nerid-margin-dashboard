@@ -316,7 +316,7 @@ export function APYHistory({ pool }: APYHistoryProps) {
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
         </div>
 
-        {isLoading ? (
+        {isLoading && dailyData.length === 0 ? (
           <div className="h-72 flex items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <div className="animate-spin h-8 w-8 border-3 border-cyan-500 border-t-transparent rounded-full"></div>
