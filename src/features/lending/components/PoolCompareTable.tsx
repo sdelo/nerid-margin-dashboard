@@ -132,16 +132,6 @@ export const PoolCompareTable: FC<Props> = ({
       {hasPositions && (
         <div className="flex items-center gap-1 mb-3">
           <button
-            onClick={() => setFilterMode("my")}
-            className={`px-3 py-1.5 text-[10px] font-medium rounded-lg transition-all ${
-              filterMode === "my"
-                ? "bg-[#2dd4bf]/15 text-[#2dd4bf] ring-1 ring-inset ring-[#2dd4bf]/30"
-                : "text-white/50 hover:text-white/70 hover:bg-white/[0.04]"
-            }`}
-          >
-            My markets
-          </button>
-          <button
             onClick={() => setFilterMode("all")}
             className={`px-3 py-1.5 text-[10px] font-medium rounded-lg transition-all ${
               filterMode === "all"
@@ -150,6 +140,16 @@ export const PoolCompareTable: FC<Props> = ({
             }`}
           >
             All markets
+          </button>
+          <button
+            onClick={() => setFilterMode("my")}
+            className={`px-3 py-1.5 text-[10px] font-medium rounded-lg transition-all ${
+              filterMode === "my"
+                ? "bg-[#2dd4bf]/15 text-[#2dd4bf] ring-1 ring-inset ring-[#2dd4bf]/30"
+                : "text-white/50 hover:text-white/70 hover:bg-white/[0.04]"
+            }`}
+          >
+            My markets
           </button>
         </div>
       )}

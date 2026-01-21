@@ -139,7 +139,6 @@ export function PoolsPage() {
   }, [userPositions]);
 
   const [selectedPoolId, setSelectedPoolId] = React.useState<string | null>(null);
-  const [poolSwitchKey, setPoolSwitchKey] = React.useState(0);
   const [poolSwitchToast, setPoolSwitchToast] = React.useState<{
     visible: boolean;
     asset: string | null;
@@ -494,7 +493,6 @@ export function PoolsPage() {
   const handlePoolSelect = (poolId: string) => {
     if (poolId !== selectedPoolId) {
       const newPool = pools.find((p) => p.id === poolId);
-      setPoolSwitchKey((prev) => prev + 1);
       setSelectedPoolId(poolId);
       setPendingDepositAmount("");
       
@@ -551,8 +549,7 @@ export function PoolsPage() {
           <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 pb-16">
             {selectedPool ? (
               <div 
-                key={poolSwitchKey} 
-                className={`animate-fade-in grid transition-all duration-300 ${
+                className={`grid transition-all duration-300 ${
                   isRailCollapsed 
                     ? "gap-0 grid-cols-1 lg:grid-cols-[1fr_auto]" 
                     : "gap-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_400px]"
@@ -692,40 +689,47 @@ export function PoolsPage() {
                   </div>
 
                   {/* ═══════════════════════════════════════════════════════════════
-                      STICKY HEADER STACK - Context + Tabs merged
-                      Uses CSS variables for dynamic positioning
+                      STICKY CONTEXT STRIP + TABS
+                      Sticks below navbar when scrolling.
                       ═══════════════════════════════════════════════════════════════ */}
                   <div 
                     ref={contextStripRef}
-                    className="sticky-second-level rounded-lg border border-white/[0.06]"
-                    style={{ top: `${navbarHeight}px` }}
+                    className="sticky z-40"
+                    style={{ 
+                      top: `${navbarHeight}px`,
+                      background: 'rgba(13, 26, 31, 0.98)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                    }}
                   >
-                    {/* Context Strip - Compact */}
-                    <div className="px-2 sm:px-3 py-1 sm:py-1.5 border-b border-white/[0.04]">
-                      <StickyContextStrip
-                        pool={selectedPool}
-                        pools={pools}
-                        selectedPoolId={selectedPoolId}
-                        onSelectPool={handlePoolSelect}
-                      />
-                    </div>
-                    
-                    {/* Main Tabs - Directly attached */}
-                    {overviewTab !== "overview" && (
-                      <div className="px-2 sm:px-3 py-1">
-                        <div className="tab-bar relative">
-                          {mainTabs.map((tab) => (
-                            <button
-                              key={tab.key}
-                              onClick={() => handleTabClick(tab.key)}
-                              className={`tab-item ${overviewTab === tab.key ? "active" : ""}`}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
-                        </div>
+                    <div className="rounded-lg border border-white/[0.06] bg-[#0d1a1f]">
+                      {/* Context Strip - Compact */}
+                      <div className="px-2 sm:px-3 py-1 sm:py-1.5 border-b border-white/[0.04]">
+                        <StickyContextStrip
+                          pool={selectedPool}
+                          pools={pools}
+                          selectedPoolId={selectedPoolId}
+                          onSelectPool={handlePoolSelect}
+                        />
                       </div>
-                    )}
+                      
+                      {/* Main Tabs - Directly attached */}
+                      {overviewTab !== "overview" && (
+                        <div className="px-2 sm:px-3 py-1">
+                          <div className="tab-bar relative">
+                            {mainTabs.map((tab) => (
+                              <button
+                                key={tab.key}
+                                onClick={() => handleTabClick(tab.key)}
+                                className={`tab-item ${overviewTab === tab.key ? "active" : ""}`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Back button - Subtle, inline with content */}
@@ -753,7 +757,9 @@ export function PoolsPage() {
                   )}
 
                   {/* Tab Content - overflow-visible allows sticky children to work properly */}
-                  <div className={`surface-elevated p-6 transition-all duration-300 overflow-visible ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
+                  <div className={`surface-elevated transition-all duration-300 overflow-visible ${
+                    overviewTab === "overview" ? "p-6" : "pt-0 px-6 pb-6"
+                  } ${isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""}`}>
                     {overviewTab === "overview" && (
                       <OverviewTiles
                         pool={selectedPool}
@@ -853,6 +859,13 @@ export function PoolsPage() {
               </div>
             )}
           </main>
+
+          {/* Pool Switch Toast */}
+          <PoolSwitchToast
+            asset={poolSwitchToast.asset}
+            iconUrl={poolSwitchToast.iconUrl}
+            isVisible={poolSwitchToast.visible}
+          />
         </>
       )}
 
@@ -910,13 +923,6 @@ export function PoolsPage() {
           setOverviewTab("activity");
           setHistoryOpen(true);
         }}
-      />
-
-      {/* Pool Switch Toast */}
-      <PoolSwitchToast
-        asset={poolSwitchToast.asset}
-        iconUrl={poolSwitchToast.iconUrl}
-        isVisible={poolSwitchToast.visible}
       />
 
       {/* Footer */}

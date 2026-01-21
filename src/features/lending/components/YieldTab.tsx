@@ -129,7 +129,7 @@ export function YieldTab({
 
     // Root margin uses the total sticky height so chips become sticky
     // exactly when they would hit the bottom of the sticky headers
-    const rootMarginTop = -(secondLevelTop + 10); // +10px buffer
+    const rootMarginTop = -(totalStickyHeight + 10); // +10px buffer
     
     const observer = new IntersectionObserver(
       (entries) => {
@@ -143,7 +143,7 @@ export function YieldTab({
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [secondLevelTop]); // Re-create observer when header height changes
+  }, [totalStickyHeight]); // Re-create observer when header height changes
 
   // Track active section on scroll using Intersection Observer (scrollspy)
   React.useEffect(() => {
@@ -183,11 +183,11 @@ export function YieldTab({
         className={`
           sticky z-30 transition-all duration-200 py-2 -mx-6 px-6
           ${isChipsSticky 
-            ? "bg-[#0d1a1f] border-b border-white/[0.06] shadow-md" 
+            ? "bg-[#0d1a1f]/98 border-b border-white/[0.06] shadow-md backdrop-blur-md" 
             : "bg-[#0d1a1f]"
           }
         `}
-        style={{ top: `${secondLevelTop}px` }}
+        style={{ top: `${totalStickyHeight}px` }}
       >
         <SectionChips
           sections={SECTIONS}

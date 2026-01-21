@@ -155,9 +155,13 @@
   position: sticky;
   top: var(--navbar-height, 56px);
   z-index: 40;
-  background: rgba(13, 26, 31, 0.97);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: rgba(13, 26, 31, 0.98);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  /* Ensure proper stacking and isolation */
+  isolation: isolate;
+  /* Add subtle shadow when stuck for visual separation */
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.3);
 }
 
 /* Tertiary sticky layer - sticks below navbar + context strip */
@@ -165,7 +169,19 @@
   position: sticky;
   top: var(--sticky-second-level, 112px);
   z-index: 30;
-  background: rgba(13, 26, 31, 0.97);
+  background: rgba(13, 26, 31, 0.98);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  /* Ensure proper stacking */
+  isolation: isolate;
+}
+
+/* Utility class for elements that need to stick at the total sticky height */
+.sticky-below-headers {
+  position: sticky;
+  top: var(--total-sticky-height, 120px);
+  z-index: 25;
+  background: rgba(13, 26, 31, 0.98);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }

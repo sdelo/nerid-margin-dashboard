@@ -89,21 +89,20 @@ body {
   }
 }
 
-/* Pool switch animation */
+/* Pool switch animation - Uses opacity only to avoid breaking sticky positioning */
+/* NOTE: transform creates a containing block which breaks position:sticky */
 @keyframes poolSwitch {
   0% {
-    opacity: 0.6;
-    transform: translateY(4px);
+    opacity: 0;
   }
 
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 .animate-fade-in {
-  animation: poolSwitch 0.3s ease-out forwards;
+  animation: poolSwitch 0.25s ease-out forwards;
 }
 
 /* Gentle slide-in animation for deposit preview and similar content */

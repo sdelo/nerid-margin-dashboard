@@ -113,7 +113,12 @@ export const StickyContextStrip: FC<Props> = ({
       {/* Pool Selector - Left Anchor - Outside overflow container for dropdown visibility */}
       <div className="relative flex-shrink-0 z-50" ref={dropdownRef}>
         <button
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDropdownOpen(!isDropdownOpen);
+          }}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] transition-all group"
         >
           <span className="text-[9px] text-white/40 uppercase tracking-wider font-medium">
@@ -150,8 +155,13 @@ export const StickyContextStrip: FC<Props> = ({
                 const isActive = p.id === selectedPoolId;
                 return (
                   <button
+                    type="button"
                     key={p.id}
-                    onClick={() => handlePoolSelect(p.id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePoolSelect(p.id);
+                    }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all ${
                       isActive
                         ? "bg-[#2dd4bf]/10 text-white"
