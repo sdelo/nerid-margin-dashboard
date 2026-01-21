@@ -9,6 +9,17 @@ import {
 import { timeRangeToParams } from "../api/types";
 import { useAppNetwork } from "../../../context/AppNetworkContext";
 
+// Inline expansion components
+import { WhaleWatch } from "./WhaleWatch";
+import { LiquidityTab } from "./LiquidityTab";
+import { LiquidationWall } from "./LiquidationWall";
+import { YieldCurve } from "./YieldCurve";
+import { PoolActivity } from "./PoolActivity";
+import { APYHistory } from "./APYHistory";
+
+// Types for expandable tiles
+type ExpandableTile = "concentration" | "liquidity" | "liquidations" | "apy" | "activity" | "rateModel" | null;
+
 interface OverviewTilesProps {
   pool: PoolOverview;
   onSelectTab: (tab: "rates" | "activity" | "risk" | "liquidations" | "concentration" | "liquidity" | "markets") => void;
@@ -80,14 +91,79 @@ interface TileData {
   };
 }
 
+// Animated expandable section wrapper using grid for smooth height animation
+function ExpandedSection({ 
+  isOpen, 
+  onClose, 
+  onOpenFullTab,
+  title,
+  children 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  onOpenFullTab: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div 
+      className="grid transition-all duration-300 ease-out"
+      style={{ 
+        gridTemplateRows: isOpen ? '1fr' : '0fr',
+        opacity: isOpen ? 1 : 0 
+      }}
+    >
+      <div className="overflow-hidden">
+        <div className="pt-4">
+        <div className="surface-elevated rounded-xl border border-[#2dd4bf]/20 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-[#2dd4bf]/5">
+            <span className="text-sm font-medium text-white">{title}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onOpenFullTab}
+                className="text-[10px] text-[#2dd4bf] hover:text-[#2dd4bf]/80 transition-colors flex items-center gap-1"
+              >
+                Open full view
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+              <button
+                onClick={onClose}
+                className="w-6 h-6 rounded-md bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center transition-colors"
+              >
+                <svg className="w-3.5 h-3.5 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Content */}
+          <div className="p-4">
+            {children}
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
   const { serverUrl } = useAppNetwork();
   const [tileData, setTileData] = React.useState<TileData | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [timeWindow, setTimeWindow] = React.useState<TimeWindow>("7d");
+  const [expandedTile, setExpandedTile] = React.useState<ExpandableTile>(null);
   
   // Track whether we've done the initial load to avoid flashing on refreshes
   const hasLoadedRef = React.useRef(false);
+  
+  // Toggle tile expansion - if already expanded, collapse; otherwise expand this one
+  const toggleTile = (tile: ExpandableTile) => {
+    setExpandedTile(prev => prev === tile ? null : tile);
+  };
   const prevPoolIdRef = React.useRef<string | undefined>(undefined);
   const prevTimeWindowRef = React.useRef<TimeWindow>(timeWindow);
 
@@ -370,8 +446,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Concentration Risk - with tooltip */}
           <div className="relative group/tile h-full">
             <button 
-              onClick={() => onSelectTab("concentration")} 
-              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              onClick={() => toggleTile("concentration")} 
+              className={`cursor-pointer text-left w-full h-full p-3 rounded-lg border transition-all ${
+                expandedTile === "concentration" 
+                  ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                  : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+              }`}
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -434,8 +514,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Withdrawal Liquidity - with tooltip */}
           <div className="relative group/tile h-full">
             <button 
-              onClick={() => onSelectTab("liquidity")} 
-              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              onClick={() => toggleTile("liquidity")} 
+              className={`cursor-pointer text-left w-full h-full p-3 rounded-lg border transition-all ${
+                expandedTile === "liquidity" 
+                  ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                  : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+              }`}
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -510,8 +594,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           {/* Bad Debt Risk - with tooltip */}
           <div className="relative group/tile h-full">
             <button 
-              onClick={() => onSelectTab("liquidations")} 
-              className="cursor-pointer text-left w-full h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+              onClick={() => toggleTile("liquidations")} 
+              className={`cursor-pointer text-left w-full h-full p-3 rounded-lg border transition-all ${
+                expandedTile === "liquidations" 
+                  ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                  : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+              }`}
             >
               <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                 <div className="flex items-center gap-1.5 min-w-0 shrink-0">
@@ -550,6 +638,41 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
             </div>
           </div>
         </div>
+
+        {/* Expanded Sections for Risk tiles */}
+        <ExpandedSection
+          isOpen={expandedTile === "concentration"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("concentration"); }}
+          title="Whale Concentration Analysis"
+        >
+          <WhaleWatch 
+            poolId={pool.contracts?.marginPoolId} 
+            decimals={pool.contracts?.coinDecimals ?? 9} 
+            asset={pool.asset} 
+          />
+        </ExpandedSection>
+
+        <ExpandedSection
+          isOpen={expandedTile === "liquidity"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("liquidity"); }}
+          title="Liquidity & Withdrawal Availability"
+        >
+          <LiquidityTab pool={pool} />
+        </ExpandedSection>
+
+        <ExpandedSection
+          isOpen={expandedTile === "liquidations"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("liquidations"); }}
+          title="Liquidations & Bad Debt"
+        >
+          <LiquidationWall 
+            poolId={pool.contracts?.marginPoolId} 
+            asset={pool.asset} 
+          />
+        </ExpandedSection>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -576,8 +699,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* APY Stability */}
           <button 
-            onClick={() => onSelectTab("rates")} 
-            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            onClick={() => toggleTile("apy")} 
+            className={`cursor-pointer text-left group h-full p-3 rounded-lg border transition-all ${
+              expandedTile === "apy" 
+                ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">APY Stability</span>
@@ -601,8 +728,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
 
           {/* Capital Flow */}
           <button 
-            onClick={() => onSelectTab("activity")} 
-            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            onClick={() => toggleTile("activity")} 
+            className={`cursor-pointer text-left group h-full p-3 rounded-lg border transition-all ${
+              expandedTile === "activity" 
+                ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Capital Flow</span>
@@ -626,8 +757,12 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
 
           {/* Rate Model */}
           <button 
-            onClick={() => onSelectTab("rates")} 
-            className="cursor-pointer text-left group h-full p-3 rounded-lg bg-white/[0.02] border border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5 transition-all"
+            onClick={() => toggleTile("rateModel")} 
+            className={`cursor-pointer text-left group h-full p-3 rounded-lg border transition-all ${
+              expandedTile === "rateModel" 
+                ? "bg-[#2dd4bf]/10 border-[#2dd4bf]/40" 
+                : "bg-white/[0.02] border-white/[0.06] hover:border-[#2dd4bf]/40 hover:bg-[#2dd4bf]/5"
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-xs text-white/50 shrink-0">Rate Model</span>
@@ -657,6 +792,34 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
             </span>
           </button>
         </div>
+
+        {/* Expanded Sections for Performance tiles */}
+        <ExpandedSection
+          isOpen={expandedTile === "apy"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("rates"); }}
+          title="APY History"
+        >
+          <APYHistory pool={pool} />
+        </ExpandedSection>
+
+        <ExpandedSection
+          isOpen={expandedTile === "activity"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("activity"); }}
+          title="Capital Flow Activity"
+        >
+          <PoolActivity pool={pool} />
+        </ExpandedSection>
+
+        <ExpandedSection
+          isOpen={expandedTile === "rateModel"}
+          onClose={() => setExpandedTile(null)}
+          onOpenFullTab={() => { setExpandedTile(null); onSelectTab("rates"); }}
+          title="Interest Rate Model"
+        >
+          <YieldCurve pool={pool} />
+        </ExpandedSection>
       </div>
 
       {/* Divider */}

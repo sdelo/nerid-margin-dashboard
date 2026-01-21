@@ -546,10 +546,10 @@ export function PoolsPage() {
           {/* ═══════════════════════════════════════════════════════════════════
               MAIN CONTENT: Unified layout with sticky headers
               ═══════════════════════════════════════════════════════════════════ */}
-          <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 pb-16">
+          <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 pb-16 overflow-visible">
             {selectedPool ? (
               <div 
-                className={`grid transition-all duration-300 ${
+                className={`grid transition-all duration-300 overflow-visible ${
                   isRailCollapsed 
                     ? "gap-0 grid-cols-1 lg:grid-cols-[1fr_auto]" 
                     : "gap-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_400px]"
@@ -557,8 +557,9 @@ export function PoolsPage() {
               >
                 {/* ═══════════════════════════════════════════════════════════════
                     LEFT COLUMN: All main content
+                    overflow-visible ensures sticky positioning works within grid
                     ═══════════════════════════════════════════════════════════════ */}
-                <div className="min-w-0 space-y-6">
+                <div className="min-w-0 space-y-6 overflow-visible">
                   {/* Pool Selection + Quick Compare */}
                   <div className="surface-elevated p-4">
                     {/* Step Indicator + Header + Protocol Topline */}
