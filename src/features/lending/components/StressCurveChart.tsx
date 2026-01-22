@@ -1,6 +1,18 @@
 import React from 'react';
 import { type AtRiskPosition } from '../../../hooks/useAtRiskPositions';
 
+/**
+ * Format price compactly (e.g., $3.21, $0.012, $15.4K)
+ */
+function formatPriceCompact(price: number): string {
+  if (price >= 1000) return `$${(price / 1000).toFixed(1)}K`;
+  if (price >= 100) return `$${price.toFixed(0)}`;
+  if (price >= 10) return `$${price.toFixed(1)}`;
+  if (price >= 1) return `$${price.toFixed(2)}`;
+  if (price >= 0.01) return `$${price.toFixed(3)}`;
+  return `$${price.toFixed(4)}`;
+}
+
 interface StressCurveChartProps {
   positions: AtRiskPosition[];
   isLoading: boolean;
@@ -147,16 +159,31 @@ export function StressCurveChart({ positions, isLoading }: StressCurveChartProps
   // Current state (0%)
   const currentPoint = curveData.find((p) => p.priceChange === 0);
 
+  // Get current base asset price from positions (first position with valid price)
+  const currentPrice = React.useMemo(() => {
+    const positionWithPrice = positions.find(p => p.basePythPrice > 0);
+    if (!positionWithPrice) return null;
+    // Convert Pyth price to USD
+    const price = positionWithPrice.basePythPrice / Math.pow(10, Math.abs(positionWithPrice.basePythDecimals));
+    return price;
+  }, [positions]);
+
+  // Calculate price at a given percentage change
+  const getPriceAtPct = (pct: number): number | null => {
+    if (currentPrice === null) return null;
+    return currentPrice * (1 + pct / 100);
+  };
+
   // Find max for scaling
   const maxLiquidatable = Math.max(...curveData.map((p) => p.liquidatableCount), 1);
   const maxDebt = Math.max(...curveData.map((p) => p.debtAtRiskUsd), 1);
 
   // Chart dimensions
-  const chartHeight = 180;
+  const chartHeight = 200;
   const paddingLeft = 50;
   const paddingRight = 50;
   const paddingTop = 30;
-  const paddingBottom = 35;
+  const paddingBottom = 55;
   const innerWidth = 600 - paddingLeft - paddingRight;
   const innerHeight = chartHeight - paddingTop - paddingBottom;
 
@@ -484,24 +511,40 @@ export function StressCurveChart({ positions, isLoading }: StressCurveChartProps
             $0
           </text>
 
-          {/* X-axis labels */}
-          {[-50, -40, -30, -20, -10, 0, 10, 20].map((pct) => (
-            <text
-              key={pct}
-              x={xScale(pct)}
-              y={paddingTop + innerHeight + 16}
-              textAnchor="middle"
-              className={`text-[9px] ${pct === 0 ? 'fill-emerald-400 font-bold' : 'fill-white/40'}`}
-            >
-              {pct > 0 ? '+' : ''}
-              {pct}%
-            </text>
-          ))}
+          {/* X-axis labels - percentage and price */}
+          {[-50, -40, -30, -20, -10, 0, 10, 20].map((pct) => {
+            const priceAtPct = getPriceAtPct(pct);
+            return (
+              <g key={pct}>
+                {/* Percentage label */}
+                <text
+                  x={xScale(pct)}
+                  y={paddingTop + innerHeight + 14}
+                  textAnchor="middle"
+                  className={`text-[9px] ${pct === 0 ? 'fill-emerald-400 font-bold' : 'fill-white/40'}`}
+                >
+                  {pct > 0 ? '+' : ''}
+                  {pct}%
+                </text>
+                {/* Price label */}
+                {priceAtPct !== null && (
+                  <text
+                    x={xScale(pct)}
+                    y={paddingTop + innerHeight + 26}
+                    textAnchor="middle"
+                    className={`text-[8px] ${pct === 0 ? 'fill-emerald-400/70' : 'fill-white/25'}`}
+                  >
+                    {formatPriceCompact(priceAtPct)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
           {/* Axis titles */}
           <text
             x={paddingLeft + innerWidth / 2}
-            y={chartHeight - 2}
+            y={chartHeight - 6}
             textAnchor="middle"
             className="fill-white/30 text-[8px] uppercase tracking-wider"
           >
@@ -571,7 +614,7 @@ export function StressCurveChart({ positions, isLoading }: StressCurveChartProps
         
         {/* Hover info or summary */}
         <div className="text-xs text-white/40">
-          <span className="text-white/30">At -30%:</span>{' '}
+          <span className="text-white/30">At -30%{currentPrice !== null && ` (${formatPriceCompact(getPriceAtPct(-30)!)})`}:</span>{' '}
           <span className="text-rose-400 font-medium">
             {curveData.find((p) => p.priceChange === -30)?.liquidatableCount || 0} positions
           </span>

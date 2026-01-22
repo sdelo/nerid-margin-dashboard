@@ -49,6 +49,8 @@ import {
 import { Footer } from "../components/Footer";
 import { useStickyHeader } from "../context/StickyHeaderContext";
 import { usePoolActivityMetrics } from "../features/lending/hooks/usePoolActivityMetrics";
+import { useProtocolTopline } from "../hooks/useProtocolTopline";
+import { InfoTooltip } from "../components/InfoTooltip";
 
 export function PoolsPage() {
   const account = useCurrentAccount();
@@ -106,28 +108,21 @@ export function PoolsPage() {
   // Protocol-level activity metrics for 7d flow
   const { metrics: poolActivityMetrics } = usePoolActivityMetrics(pools);
 
-  // Compute protocol-level aggregated metrics
+  // Compute protocol-level aggregated metrics with proper USD conversion
+  const protocolTopline = useProtocolTopline(pools, poolActivityMetrics);
+
+  // Legacy protocolMetrics for backwards compatibility
   const protocolMetrics = React.useMemo(() => {
     if (pools.length === 0) return null;
 
-    // Aggregate TVL and borrowed across all pools
-    const totalTVL = pools.reduce((sum, pool) => sum + (pool.state?.supply || 0), 0);
-    const totalBorrowed = pools.reduce((sum, pool) => sum + (pool.state?.borrow || 0), 0);
-    const utilization = totalTVL > 0 ? (totalBorrowed / totalTVL) * 100 : 0;
-
-    // Sum 7d net flow across all pools
-    let total7dFlow = 0;
-    poolActivityMetrics.forEach((metric) => {
-      total7dFlow += metric.netFlow7d;
-    });
-
     return {
-      tvl: totalTVL,
-      borrowed: totalBorrowed,
-      utilization,
-      flow7d: total7dFlow,
+      tvl: protocolTopline.tvlUsd,
+      borrowed: protocolTopline.borrowedUsd,
+      utilization: protocolTopline.utilization,
+      flow7d: protocolTopline.flow7dUsd,
+      referralRevenueUsd: protocolTopline.totalReferralFeesUsd,
     };
-  }, [pools, poolActivityMetrics]);
+  }, [pools.length, protocolTopline]);
 
   const userSupplierCapIds: string[] = React.useMemo(() => {
     const capIds = new Set(
@@ -624,6 +619,27 @@ export function PoolsPage() {
                                 }
                               </span>
                             </div>
+                            {protocolMetrics.referralRevenueUsd > 0 && (
+                              <>
+                                <div className="w-px h-8 bg-white/[0.08]" />
+                                <div className="text-center min-w-[85px] relative">
+                                  <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-0.5 whitespace-nowrap">
+                                    Ref. Revenue
+                                  </span>
+                                  <span className="text-base font-semibold text-emerald-400 tabular-nums">
+                                    ${protocolMetrics.referralRevenueUsd >= 1_000 
+                                      ? (protocolMetrics.referralRevenueUsd / 1_000).toFixed(1) + 'k'
+                                      : protocolMetrics.referralRevenueUsd >= 1
+                                        ? protocolMetrics.referralRevenueUsd.toFixed(2)
+                                        : protocolMetrics.referralRevenueUsd.toFixed(4)
+                                    }
+                                  </span>
+                                  <div className="absolute -top-0.5 -right-2">
+                                    <InfoTooltip tooltip="Supply referrals earn 50% of protocol fees proportional to their referred shares." size="sm" />
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}

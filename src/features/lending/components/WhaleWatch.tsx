@@ -20,6 +20,10 @@ import {
   ErrorIcon,
 } from "../../../components/ThemedIcons";
 
+// This account was used to seed initial capital and has been deleted.
+// It should be excluded from concentration risk calculations but shown in the table.
+const DELETED_SEED_ACCOUNT = "0xb51e160d6ee5366a1b2dda76445ed343aadba29873ad92df50725beb427248e1";
+
 interface WhaleWatchProps {
   poolId?: string;
   decimals?: number;
@@ -34,6 +38,7 @@ interface ParticipantStats {
   borrowAmount: number;
   repayAmount: number;
   transactionCount: number;
+  isDeleted?: boolean; // For accounts that have been deleted (e.g., seed capital accounts)
 }
 
 export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps) {
@@ -108,6 +113,7 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
         borrowAmount: 0,
         repayAmount: 0,
         transactionCount: 0,
+        isDeleted: event.supplier === DELETED_SEED_ACCOUNT,
       };
       const amount = parseFloat(event.amount) / 10 ** decimals;
       existing.supplyAmount += amount;
@@ -132,6 +138,12 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
       .sort((a, b) => b.netAmount - a.netAmount)
       .slice(0, 5);
   }, [suppliedEvents, withdrawnEvents, decimals]);
+
+  // Filter out deleted accounts for concentration risk calculations
+  // These accounts are not a withdrawal risk since they've been deleted
+  const activeSuppliers = React.useMemo(() => {
+    return topSuppliers.filter((s) => !s.isDeleted);
+  }, [topSuppliers]);
 
   // Calculate top borrowers
   const topBorrowers = React.useMemo(() => {
@@ -172,31 +184,35 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
       .slice(0, 5);
   }, [borrowedEvents, repaidEvents, decimals]);
 
-  // Calculate concentration metrics
+  // Calculate concentration metrics (using activeSuppliers to exclude deleted accounts)
   const concentration = React.useMemo(() => {
+    // Use activeSuppliers for risk metrics (excludes deleted seed accounts)
+    const totalActiveSupply = activeSuppliers.reduce((sum, s) => sum + s.netAmount, 0);
+    // Keep totalSupply including all for display purposes
     const totalSupply = topSuppliers.reduce((sum, s) => sum + s.netAmount, 0);
     const totalBorrow = topBorrowers.reduce((sum, b) => sum + b.netAmount, 0);
 
-    const top1Supply = topSuppliers.length > 0 ? topSuppliers[0].netAmount : 0;
+    const top1ActiveSupply = activeSuppliers.length > 0 ? activeSuppliers[0].netAmount : 0;
     const top1Borrow = topBorrowers.length > 0 ? topBorrowers[0].netAmount : 0;
 
+    // Calculate concentration using only active (non-deleted) suppliers
     const supplyConcentration =
-      totalSupply > 0 ? (top1Supply / totalSupply) * 100 : 0;
+      totalActiveSupply > 0 ? (top1ActiveSupply / totalActiveSupply) * 100 : 0;
     const borrowConcentration =
       totalBorrow > 0 ? (top1Borrow / totalBorrow) * 100 : 0;
 
-    // Calculate HHI (Herfindahl-Hirschman Index)
-    const hhi = totalSupply > 0 
-      ? topSuppliers.reduce((sum, s) => {
-          const share = (s.netAmount / totalSupply) * 100;
+    // Calculate HHI (Herfindahl-Hirschman Index) using active suppliers only
+    const hhi = totalActiveSupply > 0 
+      ? activeSuppliers.reduce((sum, s) => {
+          const share = (s.netAmount / totalActiveSupply) * 100;
           return sum + share * share;
         }, 0)
       : 0;
 
-    // Calculate Gini coefficient from Lorenz curve
+    // Calculate Gini coefficient from Lorenz curve using active suppliers only
     const gini = (() => {
-      if (topSuppliers.length === 0 || totalSupply === 0) return 0;
-      const sortedAmounts = topSuppliers.map(s => s.netAmount).sort((a, b) => a - b);
+      if (activeSuppliers.length === 0 || totalActiveSupply === 0) return 0;
+      const sortedAmounts = activeSuppliers.map(s => s.netAmount).sort((a, b) => a - b);
       const n = sortedAmounts.length;
       const sumIndexedValues = sortedAmounts.reduce((sum, amount, i) => sum + (i + 1) * amount, 0);
       const sumValues = sortedAmounts.reduce((sum, amount) => sum + amount, 0);
@@ -206,15 +222,16 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
 
     return {
       totalSupply,
+      totalActiveSupply,
       totalBorrow,
-      top1Supply,
+      top1ActiveSupply,
       top1Borrow,
       supplyConcentration,
       borrowConcentration,
       hhi,
       gini,
     };
-  }, [topSuppliers, topBorrowers]);
+  }, [topSuppliers, activeSuppliers, topBorrowers]);
 
   // Determine risk level
   const getRiskLevel = (concentrationPercent: number) => {
@@ -370,8 +387,13 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
               ) : (
                 <div className="space-y-1.5">
                   {topSuppliers.map((supplier, idx) => (
-                    <div key={supplier.address} className="flex items-center gap-2 px-2 py-1.5 bg-white/[0.03] rounded border border-white/5 hover:border-cyan-500/20 transition-colors">
+                    <div key={supplier.address} className={`flex items-center gap-2 px-2 py-1.5 rounded border transition-colors ${
+                      supplier.isDeleted 
+                        ? "bg-white/[0.01] border-white/5 opacity-60" 
+                        : "bg-white/[0.03] border-white/5 hover:border-cyan-500/20"
+                    }`}>
                       <span className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
+                        supplier.isDeleted ? "bg-white/5 text-white/30" :
                         idx === 0 ? "bg-amber-500/20 text-teal-400" :
                         idx === 1 ? "bg-slate-500/20 text-slate-300" :
                         idx === 2 ? "bg-orange-500/20 text-orange-300" : "bg-white/10 text-white/50"
@@ -380,13 +402,24 @@ export function WhaleWatch({ poolId, decimals = 9, asset = "" }: WhaleWatchProps
                         href={getExplorerUrl(supplier.address)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-[10px] text-white/60 hover:text-cyan-400 truncate flex-1 transition-colors"
-                        title="View Supply Cap"
+                        className={`font-mono text-[10px] truncate transition-colors ${
+                          supplier.isDeleted ? "text-white/40" : "text-white/60 hover:text-cyan-400"
+                        }`}
+                        title={supplier.isDeleted ? "Deleted seed capital account" : "View Supply Cap"}
                       >
                         {formatAddress(supplier.address)}
                       </a>
-                      <span className="text-xs font-semibold text-white">{supplier.netAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                      <span className="text-[10px] text-cyan-400">{((supplier.netAmount / concentration.totalSupply) * 100).toFixed(1)}%</span>
+                      {supplier.isDeleted && (
+                        <span className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-white/10 text-white/50 rounded" title="This account was used to seed initial capital and has been deleted. It cannot withdraw and is not a concentration risk.">
+                          DELETED
+                        </span>
+                      )}
+                      <span className={`text-xs font-semibold ml-auto ${supplier.isDeleted ? "text-white/40" : "text-white"}`}>
+                        {supplier.netAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                      <span className={`text-[10px] ${supplier.isDeleted ? "text-white/30" : "text-cyan-400"}`}>
+                        {((supplier.netAmount / concentration.totalSupply) * 100).toFixed(1)}%
+                      </span>
                     </div>
                   ))}
                 </div>

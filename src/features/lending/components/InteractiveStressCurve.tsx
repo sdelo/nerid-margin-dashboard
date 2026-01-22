@@ -2,6 +2,18 @@ import React from 'react';
 import { type AtRiskPosition, getPositionDirection } from '../../../hooks/useAtRiskPositions';
 import { useScenario, type ShockAsset, simulateAllPositions } from '../../../context/ScenarioContext';
 
+/**
+ * Format price compactly (e.g., $3.21, $0.012, $15.4K)
+ */
+function formatPriceCompact(price: number): string {
+  if (price >= 1000) return `$${(price / 1000).toFixed(1)}K`;
+  if (price >= 100) return `$${price.toFixed(0)}`;
+  if (price >= 10) return `$${price.toFixed(1)}`;
+  if (price >= 1) return `$${price.toFixed(2)}`;
+  if (price >= 0.01) return `$${price.toFixed(3)}`;
+  return `$${price.toFixed(4)}`;
+}
+
 interface InteractiveStressCurveProps {
   positions: AtRiskPosition[];
   isLoading: boolean;
@@ -158,6 +170,21 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
     return { long, short };
   }, [positions]);
 
+  // Get current base asset price from positions (first position with valid price)
+  const currentPrice = React.useMemo(() => {
+    const positionWithPrice = positions.find(p => p.basePythPrice > 0);
+    if (!positionWithPrice) return null;
+    // Convert Pyth price to USD
+    const price = positionWithPrice.basePythPrice / Math.pow(10, Math.abs(positionWithPrice.basePythDecimals));
+    return price;
+  }, [positions]);
+
+  // Calculate price at a given percentage change
+  const getPriceAtPct = (pct: number): number | null => {
+    if (currentPrice === null) return null;
+    return currentPrice * (1 + pct / 100);
+  };
+
   // Find cliff point
   const cliffPoint = React.useMemo(
     () => findCliffPoint(curveData),
@@ -176,11 +203,11 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
   const maxDebt = Math.max(...curveData.map((p) => p.debtAtRiskUsd), 1);
 
   // Chart dimensions
-  const chartHeight = 160;
+  const chartHeight = 175;
   const paddingLeft = 45;
   const paddingRight = 45;
   const paddingTop = 25;
-  const paddingBottom = 30;
+  const paddingBottom = 45;
   const innerWidth = 600 - paddingLeft - paddingRight;
   const innerHeight = chartHeight - paddingTop - paddingBottom;
 
@@ -527,7 +554,7 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
                 fill="#f59e0b"
                 fillOpacity="0.8"
               >
-                {shockPct > 0 ? '+' : ''}{shockPct}%
+                {shockPct > 0 ? '+' : ''}{shockPct}%{currentPrice !== null && ` (${formatPriceCompact(getPriceAtPct(shockPct)!)})`}
               </text>
             </>
           )}
@@ -558,20 +585,38 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
             />
           )}
 
-          {/* X-axis labels */}
-          {[-50, -30, -20, -10, 0, 10, 20].map((pct) => (
-            <text
-              key={pct}
-              x={xScale(pct)}
-              y={paddingTop + innerHeight + 14}
-              textAnchor="middle"
-              className="text-[8px]"
-              fill={pct === 0 ? '#10b981' : 'rgba(255,255,255,0.35)'}
-              fillOpacity={pct === 0 ? 0.7 : 1}
-            >
-              {pct > 0 ? '+' : ''}{pct}%
-            </text>
-          ))}
+          {/* X-axis labels - percentage and price */}
+          {[-50, -30, -20, -10, 0, 10, 20].map((pct) => {
+            const priceAtPct = getPriceAtPct(pct);
+            return (
+              <g key={pct}>
+                {/* Percentage label */}
+                <text
+                  x={xScale(pct)}
+                  y={paddingTop + innerHeight + 12}
+                  textAnchor="middle"
+                  className="text-[8px]"
+                  fill={pct === 0 ? '#10b981' : 'rgba(255,255,255,0.35)'}
+                  fillOpacity={pct === 0 ? 0.7 : 1}
+                >
+                  {pct > 0 ? '+' : ''}{pct}%
+                </text>
+                {/* Price label */}
+                {priceAtPct !== null && (
+                  <text
+                    x={xScale(pct)}
+                    y={paddingTop + innerHeight + 22}
+                    textAnchor="middle"
+                    className="text-[7px]"
+                    fill={pct === 0 ? '#10b981' : 'rgba(255,255,255,0.25)'}
+                    fillOpacity={pct === 0 ? 0.6 : 1}
+                  >
+                    {formatPriceCompact(priceAtPct)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
           {/* Y-axis labels - Left (Positions) */}
           <text
@@ -686,10 +731,19 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
       {range ? (
         <div className="mt-2 text-[10px] text-amber-400/70">
           Range: {range.min}% to {range.max}%
+          {currentPrice !== null && (
+            <span className="text-white/40 ml-1">
+              ({formatPriceCompact(getPriceAtPct(range.min)!)} → {formatPriceCompact(getPriceAtPct(range.max)!)})
+            </span>
+          )}
         </div>
       ) : isActive && shockPct !== 0 ? (
         <div className="mt-2 text-[10px] text-white/50">
-          At {shockPct > 0 ? '+' : ''}{shockPct}%: 
+          At {shockPct > 0 ? '+' : ''}{shockPct}%
+          {currentPrice !== null && (
+            <span className="text-white/40"> ({formatPriceCompact(getPriceAtPct(shockPct)!)})</span>
+          )}
+          : 
           <span className="text-amber-300/80 ml-1">{selectedPoint.liquidatableCount} positions</span>
           {selectedPoint.longLiquidatableCount > 0 && (
             <span className="text-cyan-400/70 ml-1">({selectedPoint.longLiquidatableCount} long)</span>
@@ -701,7 +755,11 @@ export function InteractiveStressCurve({ positions, isLoading }: InteractiveStre
         </div>
       ) : cliffPoint ? (
         <div className="mt-2 text-[10px] text-white/35">
-          Cliff at {cliffPoint.pct}%: debt jumps {cliffPoint.multiplier.toFixed(1)}×
+          Cliff at {cliffPoint.pct}%
+          {currentPrice !== null && (
+            <span> ({formatPriceCompact(getPriceAtPct(cliffPoint.pct)!)})</span>
+          )}
+          : debt jumps {cliffPoint.multiplier.toFixed(1)}×
         </div>
       ) : null}
     </div>

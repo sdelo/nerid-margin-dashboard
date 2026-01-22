@@ -18,10 +18,7 @@ export function Footer() {
 
           {/* Links */}
           <div className="flex flex-wrap gap-6">
-            <FooterLink href="/pools" internal>Dashboard</FooterLink>
-            <FooterLink href={brand.links.docs}>DeepBook Docs</FooterLink>
             <FooterLink href={brand.links.twitter}>Twitter</FooterLink>
-            <FooterLink href={brand.links.discord} placeholder>Discord</FooterLink>
             <FooterLink href={brand.links.github}>GitHub</FooterLink>
           </div>
         </div>

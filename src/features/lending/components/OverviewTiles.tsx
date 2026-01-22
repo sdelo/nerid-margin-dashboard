@@ -17,6 +17,10 @@ import { YieldCurve } from "./YieldCurve";
 import { PoolActivity } from "./PoolActivity";
 import { APYHistory } from "./APYHistory";
 
+// This account was used to seed initial capital and has been deleted.
+// It should be excluded from concentration risk calculations.
+const DELETED_SEED_ACCOUNT = "0xb51e160d6ee5366a1b2dda76445ed343aadba29873ad92df50725beb427248e1";
+
 // Types for expandable tiles
 type ExpandableTile = "concentration" | "liquidity" | "liquidations" | "apy" | "activity" | "rateModel" | null;
 
@@ -263,28 +267,31 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           .filter(([_, amount]) => amount > 0)
           .sort((a, b) => b[1] - a[1]);
 
-        const totalSupply = suppliers.reduce((sum, [_, amount]) => sum + amount, 0);
-        const topSupplierAmount = suppliers.length > 0 ? suppliers[0][1] : 0;
-        const topSupplierShare = totalSupply > 0 && suppliers.length > 0 ? (topSupplierAmount / totalSupply) * 100 : 0;
+        // Filter out deleted seed accounts for risk calculations (they can't withdraw)
+        const activeSuppliers = suppliers.filter(([address]) => address !== DELETED_SEED_ACCOUNT);
+
+        const totalActiveSupply = activeSuppliers.reduce((sum, [_, amount]) => sum + amount, 0);
+        const topActiveSupplierAmount = activeSuppliers.length > 0 ? activeSuppliers[0][1] : 0;
+        const topSupplierShare = totalActiveSupply > 0 && activeSuppliers.length > 0 ? (topActiveSupplierAmount / totalActiveSupply) * 100 : 0;
         
-        // Calculate top 3 supplier share
-        const top3Amount = suppliers.slice(0, 3).reduce((sum, [_, amount]) => sum + amount, 0);
-        const top3SupplierShare = totalSupply > 0 ? (top3Amount / totalSupply) * 100 : 0;
+        // Calculate top 3 supplier share (using active suppliers only)
+        const top3Amount = activeSuppliers.slice(0, 3).reduce((sum, [_, amount]) => sum + amount, 0);
+        const top3SupplierShare = totalActiveSupply > 0 ? (top3Amount / totalActiveSupply) * 100 : 0;
         
-        const hhi = totalSupply > 0 
-          ? suppliers.reduce((sum, [_, amount]) => {
-              const share = (amount / totalSupply) * 100;
+        const hhi = totalActiveSupply > 0 
+          ? activeSuppliers.reduce((sum, [_, amount]) => {
+              const share = (amount / totalActiveSupply) * 100;
               return sum + share * share;
             }, 0)
           : 0;
 
-        // Calculate Gini coefficient from Lorenz curve
+        // Calculate Gini coefficient from Lorenz curve (using active suppliers only)
         // Gini = 1 - 2 * (area under Lorenz curve)
         // For sorted shares: Gini = (2 * sum(i * x_i)) / (n * sum(x_i)) - (n + 1) / n
         const gini = (() => {
-          if (suppliers.length === 0 || totalSupply === 0) return 0;
+          if (activeSuppliers.length === 0 || totalActiveSupply === 0) return 0;
           // Sort suppliers by amount (ascending for Lorenz curve)
-          const sortedAmounts = suppliers.map(([_, amount]) => amount).sort((a, b) => a - b);
+          const sortedAmounts = activeSuppliers.map(([_, amount]) => amount).sort((a, b) => a - b);
           const n = sortedAmounts.length;
           const sumIndexedValues = sortedAmounts.reduce((sum, amount, i) => sum + (i + 1) * amount, 0);
           const sumValues = sortedAmounts.reduce((sum, amount) => sum + amount, 0);
@@ -292,7 +299,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           return Math.max(0, Math.min(1, giniCoeff)); // Clamp between 0 and 1
         })();
 
-        const supplyAfterWhaleExit = Math.max(pool.state.supply - topSupplierAmount, 0.01);
+        const supplyAfterWhaleExit = Math.max(pool.state.supply - topActiveSupplierAmount, 0.01);
         const utilizationIfWhaleExits = pool.state.borrow > 0 && supplyAfterWhaleExit > 0
           ? Math.min((pool.state.borrow / supplyAfterWhaleExit) * 100, 100) : 0;
 
@@ -308,7 +315,7 @@ export function OverviewTiles({ pool, onSelectTab }: OverviewTilesProps) {
           apyHistory: { min, max, trend, volatility },
           activity: { netFlow, depositDays, withdrawDays },
           risk: { liquidationCount: totalLiquidations, liquidationNotional, badDebt: totalBadDebt, badDebtPctOfSupply, isHealthy: totalBadDebt === 0, isPaused },
-          whales: { topSupplierShare, top3SupplierShare, supplierCount: suppliers.length, dominanceLevel: getDominanceLevel(hhi, topSupplierShare), utilizationIfWhaleExits, hhi, gini },
+          whales: { topSupplierShare, top3SupplierShare, supplierCount: activeSuppliers.length, dominanceLevel: getDominanceLevel(hhi, topSupplierShare), utilizationIfWhaleExits, hhi, gini },
           withdrawAvailability: { availableLiquidity, totalSupply: pool.state.supply, availablePctOfSupply, utilizationPct: liveRates.utilizationPct },
         });
       } catch (err) {

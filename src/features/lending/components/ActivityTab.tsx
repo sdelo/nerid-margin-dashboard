@@ -4,8 +4,8 @@ import { PoolActivity } from "./PoolActivity";
 import { BorrowRepayActivity } from "./BorrowRepayActivity";
 import { UnifiedEventFeed } from "./UnifiedEventFeed";
 import { WhaleComposition } from "./WhaleComposition";
+import { ReferralActivity } from "./ReferralActivity";
 import type { PoolOverview } from "../types";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import { useStickyHeader } from "../../../context/StickyHeaderContext";
 
 interface ActivityTabProps {
@@ -18,6 +18,7 @@ const SECTIONS: SectionConfig[] = [
   { id: "borrow-repay", label: "Borrow & Repay" },
   { id: "event-feed", label: "Event Feed" },
   { id: "composition", label: "Whale Watch" },
+  { id: "referrals", label: "Referrals" },
 ];
 
 /**
@@ -44,6 +45,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
   const borrowRepayRef = React.useRef<HTMLDivElement>(null);
   const eventFeedRef = React.useRef<HTMLDivElement>(null);
   const compositionRef = React.useRef<HTMLDivElement>(null);
+  const referralsRef = React.useRef<HTMLDivElement>(null);
   const sentinelRef = React.useRef<HTMLDivElement>(null);
 
   const sectionRefs: Record<string, React.RefObject<HTMLDivElement>> = {
@@ -51,6 +53,7 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
     "borrow-repay": borrowRepayRef,
     "event-feed": eventFeedRef,
     composition: compositionRef,
+    referrals: referralsRef,
   };
 
   // Helper to scroll to section with proper positioning and flash effect
@@ -304,13 +307,27 @@ export function ActivityTab({ pool, initialSection }: ActivityTabProps) {
         ═══════════════════════════════════════════════════════════════════ */}
         <section 
           ref={compositionRef} 
-          className={`scroll-mt-sticky pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+          className={`scroll-mt-sticky pb-8 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
             flashingSection === "composition" 
               ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
               : ""
           }`}
         >
           <WhaleComposition pool={pool} />
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECTION: Referral Activity
+        ═══════════════════════════════════════════════════════════════════ */}
+        <section 
+          ref={referralsRef} 
+          className={`scroll-mt-sticky pb-4 border-t border-slate-700/30 pt-6 rounded-xl transition-all duration-300 ${
+            flashingSection === "referrals" 
+              ? "ring-2 ring-[#2dd4bf] shadow-lg shadow-[#2dd4bf]/20 bg-[#2dd4bf]/5" 
+              : ""
+          }`}
+        >
+          <ReferralActivity pool={pool} />
         </section>
       </div>
     </div>

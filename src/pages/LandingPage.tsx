@@ -244,7 +244,7 @@ function AdvancedToolsSection() {
 
         <div className="text-center mt-6">
           <Link
-            to="/pools"
+            to="/liquidations"
             className="text-sm text-white/50 hover:text-white/80 transition-colors inline-flex items-center gap-1"
           >
             Explore advanced tools →
@@ -257,10 +257,13 @@ function AdvancedToolsSection() {
 
 function AdvancedFeature({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.06] text-center hover:bg-white/[0.05] transition-colors">
+    <Link
+      to="/liquidations"
+      className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.06] text-center hover:bg-white/[0.05] transition-colors block"
+    >
       <div className="text-white/40 mb-2 flex justify-center">{icon}</div>
       <span className="text-xs text-white/50">{label}</span>
-    </div>
+    </Link>
   );
 }
 

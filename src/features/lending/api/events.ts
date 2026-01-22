@@ -153,17 +153,28 @@ export interface ProtocolFeesWithdrawnEventResponse extends ApiEventResponse<{
   protocol_fees: string;
 }> {}
 
-// Protocol Fees Increased Event Response
-export interface ProtocolFeesIncreasedEventResponse extends ApiEventResponse<{
-  margin_pool_id: string;
-  new_protocol_fee_rate: string;
-}> {}
-
 // Referral Fees Claimed Event Response
 export interface ReferralFeesClaimedEventResponse extends ApiEventResponse<{
   margin_pool_id: string;
   referral_id: string;
-  amount: string;
+  owner: string;
+  fees: string;
+}> {}
+
+// Supply Referral Minted Event Response
+export interface SupplyReferralMintedEventResponse extends ApiEventResponse<{
+  margin_pool_id: string;
+  supply_referral_id: string;
+  owner: string;
+}> {}
+
+// Protocol Fees Increased Event Response (with detailed breakdown)
+export interface ProtocolFeesIncreasedEventResponse extends ApiEventResponse<{
+  margin_pool_id: string;
+  total_shares: string;
+  referral_fees: string;
+  maintainer_fees: string;
+  protocol_fees: string;
 }> {}
 
 // Margin Manager Created Event Response
@@ -352,9 +363,18 @@ export async function fetchProtocolFeesIncreased(
  * Fetch referral fees claimed events
  */
 export async function fetchReferralFeesClaimed(
-  params?: QueryParams
+  params?: QueryParams & { referral_id?: string; owner?: string }
 ): Promise<ReferralFeesClaimedEventResponse[]> {
   return apiClient.get<ReferralFeesClaimedEventResponse[]>(`/referral_fees_claimed${buildQuery(params)}`);
+}
+
+/**
+ * Fetch supply referral minted events (all referrals created in the system)
+ */
+export async function fetchSupplyReferralMinted(
+  params?: QueryParams & { owner?: string }
+): Promise<SupplyReferralMintedEventResponse[]> {
+  return apiClient.get<SupplyReferralMintedEventResponse[]>(`/supply_referral_minted${buildQuery(params)}`);
 }
 
 /**
