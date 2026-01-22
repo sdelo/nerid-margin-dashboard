@@ -1,8 +1,8 @@
 import React from 'react';
-import { type AtRiskPosition } from '../../../hooks/useAtRiskPositions';
+import { type AtRiskPosition, getPositionDirection, type PositionDirection } from '../../../hooks/useAtRiskPositions';
 import { useScenario, simulatePositionAtShock, type SimulatedPosition } from '../../../context/ScenarioContext';
-import { InteractiveStressCurve } from './InteractiveStressCurve';
-import { ScenarioHeader } from './ScenarioHeader';
+import { RiskPanel, type RiskFilter } from './RiskPanel';
+import { InfoTooltip } from '../../../components/InfoTooltip';
 
 interface LiveRiskMonitorProps {
   positions: AtRiskPosition[];
@@ -11,10 +11,8 @@ interface LiveRiskMonitorProps {
   lastUpdated: Date | null;
 }
 
-type ViewMode = 'now' | 'stress';
 type SortField = 'buffer' | 'debt' | 'collateral' | 'reward' | 'pair' | 'scenarioBuffer';
 type SortDirection = 'asc' | 'desc';
-type FilterMode = 'all' | 'liquidatable' | 'critical' | 'watch' | 'safe' | 'wouldLiquidate';
 
 type RiskBand = 'liquidatable' | 'critical' | 'warning' | 'watch' | 'safe';
 
@@ -86,6 +84,36 @@ function getImpactBadge(impact: 'SAFE' | 'WATCH' | 'LIQ'): { label: string; bgCo
   }
 }
 
+/**
+ * Get direction badge styling
+ */
+function getDirectionBadge(direction: PositionDirection): { 
+  label: string; 
+  icon: string;
+  bgColor: string; 
+  textColor: string;
+  tooltip: string;
+} {
+  switch (direction) {
+    case 'LONG':
+      return { 
+        label: 'LONG', 
+        icon: '↗',
+        bgColor: 'bg-cyan-500/15', 
+        textColor: 'text-cyan-400',
+        tooltip: 'Hurts when price drops',
+      };
+    case 'SHORT':
+      return { 
+        label: 'SHORT', 
+        icon: '↘',
+        bgColor: 'bg-violet-500/15', 
+        textColor: 'text-violet-400',
+        tooltip: 'Benefits when price drops',
+      };
+  }
+}
+
 function formatAddress(address: string): string {
   if (!address || address.length < 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -118,13 +146,12 @@ export function LiveRiskMonitor({
   onLiquidate,
   lastUpdated,
 }: LiveRiskMonitorProps) {
-  const { isActive, shockAsset, shockPct, range } = useScenario();
-  const [viewMode, setViewMode] = React.useState<ViewMode>('now');
+  const { isActive, shockAsset, shockPct, range, resetScenario } = useScenario();
   const [sortField, setSortField] = React.useState<SortField>('buffer');
   const [sortDirection, setSortDirection] = React.useState<SortDirection>('asc');
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
+  const [filterMode, setFilterMode] = React.useState<RiskFilter>('all');
   const [expandedRow, setExpandedRow] = React.useState<string | null>(null);
-  const [showOnlyAffected, setShowOnlyAffected] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState<string>('');
 
   // Calculate scenario for each position
   const positionsWithScenario = React.useMemo((): PositionWithScenario[] => {
@@ -140,6 +167,14 @@ export function LiveRiskMonitor({
   const filteredPositions = React.useMemo(() => {
     let filtered = positionsWithScenario;
 
+    // Search filter - match against position ID (marginManagerId)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(p => 
+        p.marginManagerId.toLowerCase().includes(query)
+      );
+    }
+
     // Range filter
     if (range && isActive) {
       filtered = filtered.filter(p => {
@@ -153,17 +188,13 @@ export function LiveRiskMonitor({
       });
     }
 
-    // Show only affected filter
-    if (showOnlyAffected && isActive) {
-      filtered = filtered.filter(p => 
-        p.scenario?.wouldLiquidate || 
-        (p.scenario && p.scenario.impact !== 'SAFE')
-      );
-    }
-
     // Status filter
     switch (filterMode) {
       case 'liquidatable':
+        // When scenario is active, show positions that would be liquidatable at the shock
+        if (isActive && shockPct !== 0) {
+          return filtered.filter(p => p.scenario?.wouldLiquidate);
+        }
         return filtered.filter(p => p.isLiquidatable);
       case 'critical':
         return filtered.filter(p => !p.isLiquidatable && p.distanceToLiquidation < 10);
@@ -171,12 +202,10 @@ export function LiveRiskMonitor({
         return filtered.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 10 && p.distanceToLiquidation < 30);
       case 'safe':
         return filtered.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 30);
-      case 'wouldLiquidate':
-        return filtered.filter(p => p.scenario?.wouldLiquidate && !p.isLiquidatable);
       default:
         return filtered;
     }
-  }, [positionsWithScenario, filterMode, range, isActive, shockAsset, showOnlyAffected]);
+  }, [positionsWithScenario, filterMode, range, isActive, shockAsset, shockPct, searchQuery]);
 
   // Sort positions
   const sortedPositions = React.useMemo(() => {
@@ -221,21 +250,21 @@ export function LiveRiskMonitor({
     return sorted;
   }, [filteredPositions, sortField, sortDirection]);
 
-  // Count by status
+  // Count by status - when shock active, counts reflect shocked state
   const statusCounts = React.useMemo(() => {
-    const wouldLiquidate = positionsWithScenario.filter(
-      p => p.scenario?.wouldLiquidate && !p.isLiquidatable
-    ).length;
+    // When shock is active, "liquidatable" means "would be liquidatable at shock"
+    const liquidatableCount = isActive && shockPct !== 0
+      ? positionsWithScenario.filter(p => p.scenario?.wouldLiquidate).length
+      : positions.filter(p => p.isLiquidatable).length;
 
     return {
       all: positions.length,
-      liquidatable: positions.filter(p => p.isLiquidatable).length,
+      liquidatable: liquidatableCount,
       critical: positions.filter(p => !p.isLiquidatable && p.distanceToLiquidation < 10).length,
       watch: positions.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 10 && p.distanceToLiquidation < 30).length,
       safe: positions.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 30).length,
-      wouldLiquidate,
     };
-  }, [positions, positionsWithScenario]);
+  }, [positions, positionsWithScenario, isActive, shockPct]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -293,92 +322,84 @@ export function LiveRiskMonitor({
 
   return (
     <div className="space-y-4">
-      {/* View Mode Toggle */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2 bg-white/[0.03] rounded-lg p-1 border border-white/[0.06]">
-          <button
-            onClick={() => setViewMode('now')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
-              viewMode === 'now'
-                ? 'bg-teal-500 text-slate-900'
-                : 'text-white/60 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Now
-          </button>
-          <button
-            onClick={() => setViewMode('stress')}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${
-              viewMode === 'stress'
-                ? 'bg-teal-500 text-slate-900'
-                : 'text-white/60 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-            </svg>
-            Stress Test
-          </button>
-        </div>
-
-        {viewMode === 'stress' && isActive && (
-          <label className="flex items-center gap-2 text-xs text-white/50 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showOnlyAffected}
-              onChange={(e) => setShowOnlyAffected(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-white/20 bg-white/10 text-teal-500 focus:ring-teal-500/50"
-            />
-            Show only affected positions
-          </label>
-        )}
-      </div>
-
-      {/* Stress Test Section */}
-      {viewMode === 'stress' && (
-        <div className="space-y-4">
-          <ScenarioHeader positions={positions} availableAssets={['SUI', 'DEEP']} />
-          <InteractiveStressCurve positions={positions} isLoading={isLoading} />
-        </div>
-      )}
+      {/* Risk Panel - Unified risk distribution + stress controls */}
+      <RiskPanel
+        positions={positions}
+        isLoading={isLoading}
+        onFilterChange={setFilterMode}
+        activeFilter={filterMode}
+      />
 
       {/* Filter Bar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Status Filters */}
-        <div className="flex items-center gap-1 p-1 bg-white/[0.03] rounded-lg border border-white/[0.06]">
-          {[
-            { key: 'all', label: 'All', count: statusCounts.all },
-            { key: 'liquidatable', label: 'Liquidatable', count: statusCounts.liquidatable, color: 'text-rose-400' },
-            ...(isActive && statusCounts.wouldLiquidate > 0 ? [
-              { key: 'wouldLiquidate', label: 'Would Liq', count: statusCounts.wouldLiquidate, color: 'text-rose-300' }
-            ] : []),
-            { key: 'critical', label: 'Critical', count: statusCounts.critical, color: 'text-amber-400' },
-            { key: 'watch', label: 'Watch', count: statusCounts.watch, color: 'text-teal-400' },
-            { key: 'safe', label: 'Safe', count: statusCounts.safe, color: 'text-emerald-400' },
-          ].map((filter) => (
-            <button
-              key={filter.key}
-              onClick={() => setFilterMode(filter.key as FilterMode)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
-                filterMode === filter.key
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/50 hover:text-white hover:bg-white/[0.05]'
-              }`}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Search Input */}
+          <div className="relative">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
-              {filter.label}
-              <span className={`tabular-nums ${filter.color || ''}`}>
-                {filter.count}
-              </span>
-            </button>
-          ))}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by position ID..."
+              className="w-56 pl-9 pr-8 py-1.5 text-sm bg-white/[0.03] border border-white/[0.08] rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5 text-white/40 hover:text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Status Filters */}
+          <div className="flex items-center gap-1 p-1 bg-white/[0.03] rounded-lg border border-white/[0.06]">
+            {[
+              { key: 'all' as RiskFilter, label: 'All', count: statusCounts.all },
+              { key: 'liquidatable' as RiskFilter, label: 'Liquidatable', count: statusCounts.liquidatable, color: 'text-rose-400' },
+              { key: 'critical' as RiskFilter, label: 'Critical', count: statusCounts.critical, color: 'text-amber-400' },
+              { key: 'watch' as RiskFilter, label: 'Watch', count: statusCounts.watch, color: 'text-teal-400' },
+              { key: 'safe' as RiskFilter, label: 'Safe', count: statusCounts.safe, color: 'text-emerald-400' },
+            ].map((filter) => (
+              <button
+                key={filter.key}
+                onClick={() => setFilterMode(filter.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  filterMode === filter.key
+                    ? 'bg-white/10 text-white'
+                    : 'text-white/50 hover:text-white hover:bg-white/[0.05]'
+                }`}
+              >
+                {filter.label}
+                <span className={`tabular-nums ${filter.color || ''}`}>
+                  {filter.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Summary */}
         <div className="text-xs text-white/40">
           Showing {sortedPositions.length} of {positions.length} positions
+          {searchQuery && (
+            <span className="ml-1 text-teal-400">(filtered)</span>
+          )}
           {sortField && (
             <span className="ml-2">
               · Sorted by <span className="text-white/60">{sortField === 'scenarioBuffer' ? 'shock buffer' : sortField}</span>
@@ -389,6 +410,23 @@ export function LiveRiskMonitor({
 
       {/* Table */}
       <div className="bg-white/[0.02] rounded-xl border border-white/[0.06] overflow-hidden">
+        {/* Scenario indicator bar when active */}
+        {isActive && shockPct !== 0 && (
+          <div className="px-4 py-2 bg-white/[0.02] border-b border-white/[0.04] flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-white/40">Scenario:</span>
+              <span className="font-semibold text-white">
+                {shockAsset} {shockPct > 0 ? '+' : ''}{shockPct}%
+              </span>
+            </div>
+            <button
+              onClick={resetScenario}
+              className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -403,12 +441,18 @@ export function LiveRiskMonitor({
                     <SortIcon field="pair" />
                   </div>
                 </th>
+                <th className="text-center py-3 px-4 text-white/40 font-medium">
+                  <div className="flex items-center justify-center gap-1">
+                    Direction
+                    <InfoTooltip tooltip="positionDirection" />
+                  </div>
+                </th>
                 <th 
                   className="text-right py-3 px-4 text-white/40 font-medium cursor-pointer hover:text-white/60 transition-colors"
                   onClick={() => handleSort(isActive ? 'scenarioBuffer' : 'buffer')}
                 >
                   <div className="flex items-center justify-end gap-1">
-                    Buffer {isActive && <span className="text-rose-400">(Shock)</span>}
+                    {isActive ? 'Shock Buffer' : 'Buffer'}
                     <SortIcon field={isActive ? 'scenarioBuffer' : 'buffer'} />
                   </div>
                 </th>
@@ -442,6 +486,7 @@ export function LiveRiskMonitor({
                 >
                   <div className="flex items-center justify-end gap-1">
                     Est. Profit
+                    <InfoTooltip tooltip="estimatedProfit" />
                     <SortIcon field="reward" />
                   </div>
                 </th>
@@ -496,6 +541,31 @@ export function LiveRiskMonitor({
                             </a>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Direction */}
+                      <td className="py-3 px-4 text-center">
+                        {(() => {
+                          const { direction, netExposureUsd } = getPositionDirection(position);
+                          const badge = getDirectionBadge(direction);
+                          return (
+                            <div className="flex flex-col items-center gap-0.5 group relative">
+                              <span className={`px-2 py-0.5 text-[9px] font-bold rounded ${badge.bgColor} ${badge.textColor} flex items-center gap-1`}>
+                                <span>{badge.icon}</span>
+                                {badge.label}
+                              </span>
+                              <span className="text-[9px] text-white/30 tabular-nums">
+                                {netExposureUsd >= 0 ? '+' : ''}{formatUsd(netExposureUsd)}
+                              </span>
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                                <div className="bg-slate-900 border border-white/20 rounded px-2 py-1 text-[10px] whitespace-nowrap shadow-xl">
+                                  {badge.tooltip}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Buffer with Scenario */}
@@ -617,7 +687,7 @@ export function LiveRiskMonitor({
                     {/* Expanded Row Details */}
                     {isExpanded && (
                       <tr className="bg-white/[0.02]">
-                        <td colSpan={isActive ? 10 : 9} className="py-4 px-6">
+                        <td colSpan={isActive ? 11 : 10} className="py-4 px-6">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
                               <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Base Asset</div>
@@ -727,7 +797,7 @@ export function LiveRiskMonitor({
             Safe (&gt; 30%)
           </span>
         </div>
-        <span>Click row to expand · {viewMode === 'stress' ? 'Click chart to select shock' : ''}</span>
+        <span>Click row to expand · Click chart segments to filter</span>
       </div>
     </div>
   );

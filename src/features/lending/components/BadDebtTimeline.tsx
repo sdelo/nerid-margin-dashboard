@@ -125,7 +125,7 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
 
   if (isLoading) {
     return (
-      <div className="bg-slate-800/40 rounded-xl border border-white/[0.06] p-5">
+      <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
         <div className="h-[180px] bg-white/[0.03] rounded-lg animate-pulse" />
       </div>
     );
@@ -133,17 +133,22 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
 
   if (liquidations.length === 0) {
     return (
-      <div className="bg-slate-800/40 rounded-xl border border-white/[0.06] p-5">
-        <h3 className="text-base font-semibold text-white mb-2">Bad Debt Timeline</h3>
+      <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
+        <h3 className="text-base font-semibold text-white mb-2 flex items-center gap-2">
+          <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Liquidation Activity
+        </h3>
         <p className="text-sm text-white/40">No liquidation events to analyze</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-800/40 rounded-xl border border-white/[0.06] p-5">
+    <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
       {/* Header with stats */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-5">
         <div>
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -151,38 +156,37 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
             </svg>
             Liquidation Activity
           </h3>
-          <p className="text-xs text-white/40 mt-0.5">
+          <p className="text-xs text-white/40 mt-1">
             Daily liquidations + bad debt trend — proof of system stability
           </p>
         </div>
 
         {/* Key stats */}
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-3">
           {stats.worstDay ? (
-            <div className="text-right">
-              <div className="text-rose-400 font-semibold">
+            <div className="text-right px-3 py-2 bg-rose-500/10 rounded-lg border border-rose-500/20">
+              <div className="text-rose-400 font-semibold text-sm">
                 Worst: {formatValue(stats.worstDay.badDebt)}
               </div>
-              <div className="text-white/30">{formatDate(stats.worstDay.date)}</div>
+              <div className="text-white/40 text-[10px]">{formatDate(stats.worstDay.date)}</div>
             </div>
           ) : (
-            <div className="text-right">
-              <div className="text-emerald-400 font-semibold">No bad debt</div>
-              <div className="text-white/30">across all days</div>
+            <div className="text-right px-3 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+              <div className="text-emerald-400 font-semibold text-sm">No bad debt</div>
+              <div className="text-white/40 text-[10px]">across all days</div>
             </div>
           )}
-          <div className="w-px h-8 bg-white/10" />
-          <div className="text-right">
-            <div className="text-white/60 font-semibold">
+          <div className="text-right px-3 py-2 bg-white/[0.04] rounded-lg border border-white/[0.06]">
+            <div className="text-white/70 font-semibold text-sm">
               Median: {formatValue(stats.medianBadDebt)}
             </div>
-            <div className="text-white/30">per day</div>
+            <div className="text-white/40 text-[10px]">per day</div>
           </div>
         </div>
       </div>
 
       {/* Chart */}
-      <div className="relative">
+      <div className="relative bg-white/[0.02] rounded-lg p-2 border border-white/[0.04]">
         <svg viewBox={`0 0 600 ${chartHeight}`} className="w-full" preserveAspectRatio="xMidYMid meet">
           {/* Grid lines */}
           {[0, 0.5, 1].map((ratio) => (
@@ -193,7 +197,8 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
               x2={paddingLeft + innerWidth}
               y2={paddingTop + innerHeight * (1 - ratio)}
               stroke="white"
-              strokeOpacity="0.05"
+              strokeOpacity="0.06"
+              strokeDasharray="4 4"
             />
           ))}
 
@@ -206,22 +211,36 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
 
             return (
               <g key={day.date}>
+                {/* Bar glow effect for active bars */}
+                {barHeight > 10 && (
+                  <rect
+                    x={x - 1}
+                    y={y - 1}
+                    width={barWidth + 2}
+                    height={Math.max(barHeight, 2) + 2}
+                    rx={3}
+                    fill={hasBadDebt ? '#f43f5e' : '#14b8a6'}
+                    fillOpacity={0.15}
+                    filter="blur(4px)"
+                  />
+                )}
                 <rect
                   x={x}
                   y={y}
                   width={barWidth}
                   height={Math.max(barHeight, 2)}
-                  rx={2}
+                  rx={3}
                   fill={hasBadDebt ? '#f43f5e' : '#14b8a6'}
-                  fillOpacity={hasBadDebt ? 0.6 : 0.4}
+                  fillOpacity={hasBadDebt ? 0.85 : 0.7}
                 />
-                {/* Hover indicator - only show count for bars with activity */}
-                {day.liquidationCount > 0 && barHeight > 15 && (
+                {/* Bar value label */}
+                {day.liquidationCount > 0 && barHeight > 20 && (
                   <text
                     x={xScale(idx)}
-                    y={y + 12}
+                    y={y + 14}
                     textAnchor="middle"
-                    className="fill-white text-[8px] font-medium"
+                    className="fill-white text-[9px] font-semibold"
+                    style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
                   >
                     {day.liquidationCount}
                   </text>
@@ -233,29 +252,49 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
           {/* Bad debt line (if any bad debt exists) */}
           {stats.totalBadDebtDays > 0 && (
             <>
+              {/* Line glow effect */}
               <path
                 d={linePath}
                 fill="none"
                 stroke="#f43f5e"
-                strokeWidth="2"
+                strokeWidth="6"
+                strokeOpacity="0.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d={linePath}
+                fill="none"
+                stroke="#fb7185"
+                strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
               {/* Data points for bad debt days */}
               {displayData
                 .filter((d) => d.badDebt > 0)
-                .map((day, idx) => {
+                .map((day) => {
                   const originalIdx = displayData.indexOf(day);
                   return (
-                    <circle
-                      key={day.date}
-                      cx={xScale(originalIdx)}
-                      cy={yScaleBadDebt(day.badDebt)}
-                      r={4}
-                      fill="#f43f5e"
-                      stroke="white"
-                      strokeWidth={1.5}
-                    />
+                    <g key={day.date}>
+                      {/* Dot glow */}
+                      <circle
+                        cx={xScale(originalIdx)}
+                        cy={yScaleBadDebt(day.badDebt)}
+                        r={7}
+                        fill="#f43f5e"
+                        fillOpacity={0.3}
+                      />
+                      {/* Main dot */}
+                      <circle
+                        cx={xScale(originalIdx)}
+                        cy={yScaleBadDebt(day.badDebt)}
+                        r={5}
+                        fill="#fb7185"
+                        stroke="#0d1117"
+                        strokeWidth={2}
+                      />
+                    </g>
                   );
                 })}
             </>
@@ -263,20 +302,20 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
 
           {/* Y-axis labels (left - count) */}
           <text
-            x={paddingLeft - 5}
+            x={paddingLeft - 8}
             y={paddingTop}
             textAnchor="end"
             dominantBaseline="middle"
-            className="fill-white/30 text-[8px]"
+            className="fill-white/40 text-[9px] font-medium"
           >
             {maxCount}
           </text>
           <text
-            x={paddingLeft - 5}
+            x={paddingLeft - 8}
             y={paddingTop + innerHeight}
             textAnchor="end"
             dominantBaseline="middle"
-            className="fill-white/30 text-[8px]"
+            className="fill-white/40 text-[9px] font-medium"
           >
             0
           </text>
@@ -290,9 +329,9 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
                 <text
                   key={day.date}
                   x={xScale(idx)}
-                  y={paddingTop + innerHeight + 15}
+                  y={paddingTop + innerHeight + 16}
                   textAnchor="middle"
-                  className="fill-white/30 text-[8px]"
+                  className="fill-white/40 text-[9px] font-medium"
                 >
                   {formatDate(day.date)}
                 </text>
@@ -302,25 +341,25 @@ export function BadDebtTimeline({ liquidations, isLoading }: BadDebtTimelineProp
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-6 mt-3 pt-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="w-3 h-2 rounded-sm bg-teal-500/60" />
-          <span className="text-white/40">Healthy liquidations</span>
+      <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-white/[0.04]">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-3 h-3 rounded bg-teal-500/70" />
+          <span className="text-white/50">Healthy liquidations</span>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px]">
-          <span className="w-3 h-2 rounded-sm bg-rose-500/60" />
-          <span className="text-white/40">Days with bad debt</span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-3 h-3 rounded bg-rose-500/70" />
+          <span className="text-white/50">Days with bad debt</span>
         </div>
         {stats.totalBadDebtDays > 0 && (
-          <div className="flex items-center gap-1.5 text-[10px]">
-            <span className="w-3 h-0.5 bg-rose-500 rounded" />
-            <span className="text-white/40">Bad debt trend</span>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-4 h-0.5 bg-rose-400 rounded-full" />
+            <span className="text-white/50">Bad debt trend</span>
           </div>
         )}
       </div>
 
       {/* Stability verdict */}
-      <div className="mt-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+      <div className="mt-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         {stats.totalBadDebtDays === 0 ? (
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

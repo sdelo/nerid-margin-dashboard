@@ -46,6 +46,10 @@ export const TOOLTIP_DEFINITIONS = {
   borrowVolume7d: "Total borrow turnover in 7 days. Shows how actively borrowers are cycling in/out.",
   activeUsers7d: "Unique users active in 7 days. Format: Suppliers / Borrowers.",
   lastActivity: "Time since the most recent pool activity (supply, withdraw, borrow, or repay).",
+  
+  // Liquidation metrics
+  estimatedProfit: "Estimated net profit = Liquidation Bonus − Gas (~$0.50) − Slippage (~0.3% of debt). Actual profit may vary based on market conditions and execution.",
+  positionDirection: "LONG: Net long base asset—hurts when price drops. SHORT: Net short base asset—benefits when price drops.",
 } as const;
 
 export type TooltipKey = keyof typeof TOOLTIP_DEFINITIONS;

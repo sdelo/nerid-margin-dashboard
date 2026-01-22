@@ -1,7 +1,6 @@
 import React from "react";
-import { useAtRiskPositions, useRiskDistribution, type AtRiskPosition } from "../../../hooks/useAtRiskPositions";
+import { useAtRiskPositions, type AtRiskPosition } from "../../../hooks/useAtRiskPositions";
 import { LiveRiskMonitor } from "./LiveRiskMonitor";
-import { LiquidationAnalytics } from "./LiquidationAnalytics";
 import { ProtocolProofSection } from "./ProtocolProofSection";
 import { TransactionDetailsModal } from "../../../components/TransactionButton/TransactionDetailsModal";
 import { CONTRACTS } from "../../../config/contracts";
@@ -14,8 +13,7 @@ import { ScenarioProvider } from "../../../context/ScenarioContext";
  * A single-page dashboard covering:
  * 1. System Status Hero - Health verdict + key metrics at a glance
  * 2. Live Risk Monitor - Sortable table with all positions, status badges, one-click liquidate
- * 3. Liquidation Analytics - Risk distribution histogram + price sensitivity simulator
- * 4. Protocol Proof - Historical stats, bad debt tracking, liquidator leaderboard
+ * 3. Protocol Proof - Historical stats, bad debt tracking, liquidator leaderboard
  */
 
 function formatUsd(value: number): string {
@@ -36,7 +34,7 @@ function calculateNetProfit(position: AtRiskPosition): number {
   return grossReward - estimatedGasCost - estimatedSlippage;
 }
 
-type ExploreTab = 'monitor' | 'analytics' | 'proof';
+type ExploreTab = 'monitor' | 'proof';
 
 export function LiquidationDashboard() {
   const { network } = useSuiClientContext();
@@ -57,9 +55,6 @@ export function LiquidationDashboard() {
     refetch: refetchPositions,
     lastUpdated,
   } = useAtRiskPositions();
-
-  // Risk distribution from positions
-  const riskDistribution = useRiskDistribution(positions);
 
   // Calculate additional metrics
   const metrics = React.useMemo(() => {
@@ -313,20 +308,6 @@ export function LiquidationDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab('analytics')}
-          className={`px-4 py-2.5 rounded-t-lg text-sm font-medium transition-all flex items-center gap-2 border-b-2 -mb-[5px] ${
-            activeTab === 'analytics'
-              ? 'bg-white/[0.06] text-white border-teal-400'
-              : 'text-white/50 hover:text-white hover:bg-white/[0.03] border-transparent'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
-          Liquidation Analytics
-        </button>
-
-        <button
           onClick={() => setActiveTab('proof')}
           className={`px-4 py-2.5 rounded-t-lg text-sm font-medium transition-all flex items-center gap-2 border-b-2 -mb-[5px] ${
             activeTab === 'proof'
@@ -337,7 +318,7 @@ export function LiquidationDashboard() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
-          Protocol Proof & History
+          History
         </button>
       </div>
 
@@ -367,15 +348,6 @@ export function LiquidationDashboard() {
             isLoading={positionsLoading}
             onLiquidate={handleLiquidate}
             lastUpdated={lastUpdated}
-          />
-        )}
-
-        {/* Liquidation Analytics */}
-        {activeTab === 'analytics' && !positionsError && (
-          <LiquidationAnalytics
-            positions={positions}
-            riskDistribution={riskDistribution}
-            isLoading={positionsLoading}
           />
         )}
 

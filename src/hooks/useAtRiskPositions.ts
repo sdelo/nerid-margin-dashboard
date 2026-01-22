@@ -9,6 +9,51 @@ import {
 import { useAppNetwork } from '../context/AppNetworkContext';
 
 /**
+ * Position direction based on net base asset exposure
+ * - LONG: More base asset than base debt (hurts when base price drops)
+ * - SHORT: More base debt than base asset (benefits when base price drops)
+ */
+export type PositionDirection = 'LONG' | 'SHORT';
+
+/**
+ * Calculate position direction based on net base exposure
+ * Returns the direction and the magnitude of the net exposure in USD
+ */
+export function getPositionDirection(position: {
+  baseAssetUsd: number;
+  baseDebtUsd: number;
+}): { direction: PositionDirection; netExposureUsd: number; netExposurePct: number } {
+  const netExposureUsd = position.baseAssetUsd - position.baseDebtUsd;
+  const totalBase = position.baseAssetUsd + position.baseDebtUsd;
+  const netExposurePct = totalBase > 0 ? (netExposureUsd / totalBase) * 100 : 0;
+  
+  return {
+    direction: netExposureUsd >= 0 ? 'LONG' : 'SHORT',
+    netExposureUsd,
+    netExposurePct,
+  };
+}
+
+/**
+ * Get position direction counts
+ */
+export function getDirectionCounts(positions: Array<{ baseAssetUsd: number; baseDebtUsd: number }>): {
+  long: number;
+  short: number;
+} {
+  let long = 0;
+  let short = 0;
+  
+  positions.forEach(p => {
+    const { direction } = getPositionDirection(p);
+    if (direction === 'LONG') long++;
+    else short++;
+  });
+  
+  return { long, short };
+}
+
+/**
  * Processed at-risk position with calculated fields
  */
 export interface AtRiskPosition {
