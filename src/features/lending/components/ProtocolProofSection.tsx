@@ -233,6 +233,8 @@ function ProtocolNarrativeBlock({
 /**
  * Protocol Proof Section - Historical stats, leaderboard, bad debt tracking
  */
+const EVENTS_PER_PAGE = 20;
+
 export function ProtocolProofSection() {
   const { serverUrl } = useAppNetwork();
   const [timeRange, setTimeRange] = React.useState<TimeRange>('3M');
@@ -240,6 +242,7 @@ export function ProtocolProofSection() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<Error | null>(null);
   const [activeView, setActiveView] = React.useState<'history' | 'leaderboard'>('leaderboard');
+  const [eventsPage, setEventsPage] = React.useState<number>(1);
 
   // Fetch liquidation data
   React.useEffect(() => {
@@ -285,6 +288,23 @@ export function ProtocolProofSection() {
     () => calculateProofMetrics(liquidations, lifetimeMetrics.totalVolume),
     [liquidations, lifetimeMetrics.totalVolume]
   );
+
+  // Sorted liquidations for table
+  const sortedLiquidations = React.useMemo(() => {
+    return [...liquidations].sort((a, b) => b.checkpoint_timestamp_ms - a.checkpoint_timestamp_ms);
+  }, [liquidations]);
+
+  // Pagination for events table
+  const eventsTotalPages = Math.ceil(sortedLiquidations.length / EVENTS_PER_PAGE);
+  const paginatedLiquidations = React.useMemo(() => {
+    const startIndex = (eventsPage - 1) * EVENTS_PER_PAGE;
+    return sortedLiquidations.slice(startIndex, startIndex + EVENTS_PER_PAGE);
+  }, [sortedLiquidations, eventsPage]);
+
+  // Reset events page when time range changes
+  React.useEffect(() => {
+    setEventsPage(1);
+  }, [timeRange]);
 
   // Aggregate by liquidator for leaderboard
   const leaderboard = React.useMemo((): LiquidatorStats[] => {
@@ -708,10 +728,7 @@ export function ProtocolProofSection() {
                   </tr>
                 </thead>
                 <tbody>
-                  {liquidations
-                    .sort((a, b) => b.checkpoint_timestamp_ms - a.checkpoint_timestamp_ms)
-                    .slice(0, 25)
-                    .map((liq, index) => {
+                  {paginatedLiquidations.map((liq, index) => {
                       const hasBadDebt = parseFloat(liq.pool_default) > 0;
                       return (
                         <tr
@@ -821,9 +838,111 @@ export function ProtocolProofSection() {
                     })}
                 </tbody>
               </table>
-              {liquidations.length > 25 && (
-                <div className="text-center py-3 text-white/30 text-xs border-t border-white/[0.04]">
-                  Showing 25 of {liquidations.length} liquidations
+
+              {/* Pagination Controls */}
+              {eventsTotalPages > 1 && (
+                <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
+                  <div className="text-xs text-white/40">
+                    Showing {((eventsPage - 1) * EVENTS_PER_PAGE) + 1}–{Math.min(eventsPage * EVENTS_PER_PAGE, sortedLiquidations.length)} of {sortedLiquidations.length} liquidations
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {/* First Page */}
+                    <button
+                      onClick={() => setEventsPage(1)}
+                      disabled={eventsPage === 1}
+                      className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="First page"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    
+                    {/* Previous Page */}
+                    <button
+                      onClick={() => setEventsPage(p => Math.max(1, p - 1))}
+                      disabled={eventsPage === 1}
+                      className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Previous page"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-0.5 mx-1">
+                      {(() => {
+                        const pages: (number | 'ellipsis')[] = [];
+                        const maxVisible = 5;
+                        
+                        if (eventsTotalPages <= maxVisible) {
+                          for (let i = 1; i <= eventsTotalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          
+                          if (eventsPage > 3) {
+                            pages.push('ellipsis');
+                          }
+                          
+                          const start = Math.max(2, eventsPage - 1);
+                          const end = Math.min(eventsTotalPages - 1, eventsPage + 1);
+                          
+                          for (let i = start; i <= end; i++) {
+                            if (!pages.includes(i)) pages.push(i);
+                          }
+                          
+                          if (eventsPage < eventsTotalPages - 2) {
+                            pages.push('ellipsis');
+                          }
+                          
+                          if (!pages.includes(eventsTotalPages)) pages.push(eventsTotalPages);
+                        }
+                        
+                        return pages.map((page, idx) => 
+                          page === 'ellipsis' ? (
+                            <span key={`ellipsis-${idx}`} className="px-2 text-white/30">…</span>
+                          ) : (
+                            <button
+                              key={page}
+                              onClick={() => setEventsPage(page)}
+                              className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition-colors ${
+                                eventsPage === page
+                                  ? 'bg-teal-500 text-slate-900'
+                                  : 'text-white/60 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )
+                        );
+                      })()}
+                    </div>
+
+                    {/* Next Page */}
+                    <button
+                      onClick={() => setEventsPage(p => Math.min(eventsTotalPages, p + 1))}
+                      disabled={eventsPage === eventsTotalPages}
+                      className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Next page"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+
+                    {/* Last Page */}
+                    <button
+                      onClick={() => setEventsPage(eventsTotalPages)}
+                      disabled={eventsPage === eventsTotalPages}
+                      className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Last page"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

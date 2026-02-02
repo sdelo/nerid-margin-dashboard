@@ -140,6 +140,8 @@ interface PositionWithScenario extends AtRiskPosition {
 /**
  * Live Risk Monitor - Sortable margin manager table with scenario mode
  */
+const ITEMS_PER_PAGE = 15;
+
 export function LiveRiskMonitor({
   positions,
   isLoading,
@@ -152,6 +154,7 @@ export function LiveRiskMonitor({
   const [filterMode, setFilterMode] = React.useState<RiskFilter>('all');
   const [expandedRow, setExpandedRow] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState<string>('');
+  const [currentPage, setCurrentPage] = React.useState<number>(1);
 
   // Calculate scenario for each position
   const positionsWithScenario = React.useMemo((): PositionWithScenario[] => {
@@ -249,6 +252,18 @@ export function LiveRiskMonitor({
     
     return sorted;
   }, [filteredPositions, sortField, sortDirection]);
+
+  // Pagination
+  const totalPages = Math.ceil(sortedPositions.length / ITEMS_PER_PAGE);
+  const paginatedPositions = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedPositions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [sortedPositions, currentPage]);
+
+  // Reset to page 1 when filters/search change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filterMode, searchQuery, isActive, shockPct]);
 
   // Count by status - when shock active, counts reflect shocked state
   const statusCounts = React.useMemo(() => {
@@ -494,7 +509,7 @@ export function LiveRiskMonitor({
               </tr>
             </thead>
             <tbody>
-              {sortedPositions.map((position) => {
+              {paginatedPositions.map((position) => {
                 const band = getRiskBand(position);
                 const badge = getStatusBadge(band);
                 const netProfit = calculateNetProfit(position);
@@ -775,6 +790,113 @@ export function LiveRiskMonitor({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between bg-white/[0.02]">
+            <div className="text-xs text-white/40">
+              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, sortedPositions.length)} of {sortedPositions.length} positions
+            </div>
+            <div className="flex items-center gap-1">
+              {/* First Page */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="First page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
+              
+              {/* Previous Page */}
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Previous page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-0.5 mx-1">
+                {(() => {
+                  const pages: (number | 'ellipsis')[] = [];
+                  const maxVisible = 5;
+                  
+                  if (totalPages <= maxVisible) {
+                    for (let i = 1; i <= totalPages; i++) pages.push(i);
+                  } else {
+                    pages.push(1);
+                    
+                    if (currentPage > 3) {
+                      pages.push('ellipsis');
+                    }
+                    
+                    const start = Math.max(2, currentPage - 1);
+                    const end = Math.min(totalPages - 1, currentPage + 1);
+                    
+                    for (let i = start; i <= end; i++) {
+                      if (!pages.includes(i)) pages.push(i);
+                    }
+                    
+                    if (currentPage < totalPages - 2) {
+                      pages.push('ellipsis');
+                    }
+                    
+                    if (!pages.includes(totalPages)) pages.push(totalPages);
+                  }
+                  
+                  return pages.map((page, idx) => 
+                    page === 'ellipsis' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-white/30">…</span>
+                    ) : (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-medium transition-colors ${
+                          currentPage === page
+                            ? 'bg-teal-500 text-slate-900'
+                            : 'text-white/60 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    )
+                  );
+                })()}
+              </div>
+
+              {/* Next Page */}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Next page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              {/* Last Page */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Last page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer Legend */}
