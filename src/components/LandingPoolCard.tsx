@@ -25,7 +25,7 @@ export function LandingPoolCard({ pool }: LandingPoolCardProps) {
 
   return (
     <Link
-      to={`/pools?pool=${pool.id}`}
+      to={`/pools?pool=${pool.asset}`}
       className="group block relative rounded-2xl p-6 cursor-pointer
         bg-gradient-to-b from-[rgba(20,40,52,0.7)] to-[rgba(13,26,31,0.6)]
         border border-[rgba(45,212,191,0.12)]
