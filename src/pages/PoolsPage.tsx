@@ -6,13 +6,11 @@ import StickyContextStrip from "../features/lending/components/StickyContextStri
 import PoolSwitchToast from "../features/lending/components/PoolSwitchToast";
 import PortfolioCard from "../features/lending/components/PortfolioCard";
 import ActionPanel from "../features/lending/components/ActionPanel";
-import { OverviewTiles } from "../features/lending/components/OverviewTiles";
+import { PoolAnalytics, ANALYTICS_SECTIONS, type ScrollCommand } from "../features/lending/components/PoolAnalytics";
+import { SectionChips } from "../components/SectionChips";
 import SlidePanel from "../features/shared/components/SlidePanel";
 import DepositHistory from "../features/lending/components/DepositHistory";
 import { LiquidationDashboard } from "../features/lending/components/LiquidationDashboard";
-import { YieldTab } from "../features/lending/components/YieldTab";
-import { RiskTab } from "../features/lending/components/RiskTab";
-import { ActivityTab } from "../features/lending/components/ActivityTab";
 import { AdminHistorySlidePanel } from "../features/lending/components/AdminHistorySlidePanel";
 import { InterestRateHistoryPanel } from "../features/lending/components/InterestRateHistoryPanel";
 import { DeepbookPoolHistoryPanel } from "../features/lending/components/DeepbookPoolHistoryPanel";
@@ -36,7 +34,7 @@ import { InfoTooltip } from "../components/InfoTooltip";
 import { useTransactionToast } from "../hooks/useTransactionToast";
 import { useTransactionFlow } from "../hooks/useTransactionFlow";
 import { usePoolSelection } from "../hooks/usePoolSelection";
-import { usePoolsUrlState, type TabKey } from "../hooks/usePoolsUrlState";
+import { usePoolsUrlState } from "../hooks/usePoolsUrlState";
 
 export function PoolsPage() {
   const account = useCurrentAccount();
@@ -50,14 +48,12 @@ export function PoolsPage() {
   const { pools, userPositions, isLoading, error: poolsError, refetch: refetchPools } =
     useAllPools(account?.address);
 
-  // ── URL state (pool, tab, section synced to ?pool=SUI&tab=risk&section=liquidity) ─
+  // ── URL state (pool + section synced to ?pool=SUI&section=risk) ─
   const {
     urlPoolId,
-    urlTab,
     urlSection,
     setUrlPool,
-    setUrlTab,
-    clearUrlTab,
+    setUrlSection,
   } = usePoolsUrlState(pools);
 
   // ── Pool selection ─────────────────────────────────────────────────
@@ -83,15 +79,11 @@ export function PoolsPage() {
     [rawHandlePoolSelect, pools, setUrlPool]
   );
 
-  // ── Tab / section state (driven by URL) ────────────────────────────
-  const overviewTab = urlTab;
-  const initialSection = urlSection;
-
-  const [isDetailsGlowing, setIsDetailsGlowing] = React.useState(false);
-  const detailsRef = React.useRef<HTMLDivElement>(null);
-
   // ── Right rail collapse ────────────────────────────────────────────
   const [isRailCollapsed, setIsRailCollapsed] = React.useState(false);
+
+  // ── How It Works slide panel ─────────────────────────────────────
+  const [howItWorksOpen, setHowItWorksOpen] = React.useState(false);
 
   // ── Sticky header context ──────────────────────────────────────────
   const { navbarHeight, setContextStripHeight } = useStickyHeader();
@@ -116,6 +108,30 @@ export function PoolsPage() {
       window.removeEventListener("resize", updateHeight);
     };
   }, [setContextStripHeight]);
+
+  // ── Section chips state ──────────────────────────────────────────────
+  const [activeSection, setActiveSection] = React.useState<string>(urlSection || "health");
+  const [scrollCommand, setScrollCommand] = React.useState<ScrollCommand | null>(
+    urlSection ? { id: urlSection, n: 0 } : null,
+  );
+
+  // When chip is clicked → update active + tell PoolAnalytics to scroll
+  const handleChipClick = React.useCallback(
+    (sectionId: string) => {
+      setActiveSection(sectionId);
+      setScrollCommand((prev) => ({ id: sectionId, n: (prev?.n ?? 0) + 1 }));
+      setUrlSection(sectionId);
+    },
+    [setUrlSection],
+  );
+
+  // Scrollspy callback from PoolAnalytics
+  const handleActiveSectionChange = React.useCallback(
+    (sectionId: string) => {
+      setActiveSection(sectionId);
+    },
+    [],
+  );
 
   // ── Protocol metrics ───────────────────────────────────────────────
   const { metrics: poolActivityMetrics } = usePoolActivityMetrics(pools);
@@ -183,46 +199,8 @@ export function PoolsPage() {
   const [interestRateHistoryOpen, setInterestRateHistoryOpen] = React.useState(false);
   const [interestRateHistoryPoolId, setInterestRateHistoryPoolId] = React.useState<string | null>(null);
 
-  // ── Tab helpers ────────────────────────────────────────────────────
-  const mainTabs: readonly { key: TabKey; label: string; description: string }[] = [
-    { key: "yield", label: "Yield", description: "Rates, APY history & markets" },
-    { key: "risk", label: "Risk", description: "Liquidity, concentration & liquidations" },
-    { key: "activity", label: "Activity", description: "Deposits, withdrawals & flows" },
-  ];
-
-  const getTabLabel = (tab: TabKey): string => {
-    if (tab === "overview") return "Overview";
-    if (tab === "howItWorks") return "How It Works";
-    return mainTabs.find((t) => t.key === tab)?.label || tab;
-  };
-
-  const handleTabClick = React.useCallback(
-    (tab: TabKey, section?: string) => {
-      setUrlTab(tab, section);
-
-      if (!section) {
-        setTimeout(() => {
-          detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          setIsDetailsGlowing(true);
-          setTimeout(() => setIsDetailsGlowing(false), 400);
-        }, 50);
-      } else {
-        if (detailsRef.current) {
-          const headerOffset = 180;
-          const elementRect = detailsRef.current.getBoundingClientRect();
-          const absoluteElementTop = elementRect.top + window.scrollY;
-          const targetScrollPosition = absoluteElementTop - headerOffset;
-          window.scrollTo({
-            top: Math.max(0, targetScrollPosition),
-            behavior: "auto",
-          });
-        }
-      }
-    },
-    [setUrlTab]
-  );
-
   const hasError = poolsError;
+
 
   return (
     <div className="min-h-screen text-white">
@@ -420,26 +398,29 @@ export function PoolsPage() {
                       txStatus={txStatus}
                       onAmountChange={setPendingDepositAmount}
                       currentPositionBalance={selectedPoolDepositedBalance}
-                      onShowHowItWorks={() => handleTabClick("howItWorks")}
+                      onShowHowItWorks={() => setHowItWorksOpen(true)}
                     />
                   </div>
 
                   {/* ═══════════════════════════════════════════════════════════
-                      STICKY CONTEXT STRIP + TABS
+                      STICKY CONTEXT STRIP + SECTION CHIPS
+                      Both live in ONE sticky container so they always stay visible.
+                      No backdrop-filter here — that was breaking sticky for children.
                       ═══════════════════════════════════════════════════════════ */}
                   <div
                     ref={contextStripRef}
                     className="sticky z-40"
                     style={{
                       top: `${navbarHeight}px`,
-                      background: "rgba(13, 26, 31, 0.98)",
-                      backdropFilter: "blur(16px)",
-                      WebkitBackdropFilter: "blur(16px)",
+                      /* Use opaque bg instead of backdrop-filter to avoid
+                         creating a containing block that breaks sticky for
+                         sibling elements */
+                      background: "rgb(13, 26, 31)",
                     }}
                   >
-                    <div className="rounded-lg border border-white/[0.06] bg-[#0d1a1f]">
-                      {/* Context Strip - Compact */}
-                      <div className="px-2 sm:px-3 py-1 sm:py-1.5 border-b border-white/[0.04]">
+                    {/* Context strip (pool selector + key metrics) */}
+                    <div className="rounded-t-lg border border-b-0 border-white/[0.06] bg-[#0d1a1f]">
+                      <div className="px-2 sm:px-3 py-1 sm:py-1.5">
                         <StickyContextStrip
                           pool={selectedPool}
                           pools={pools}
@@ -447,102 +428,31 @@ export function PoolsPage() {
                           onSelectPool={handlePoolSelect}
                         />
                       </div>
+                    </div>
 
-                      {/* Main Tabs - Directly attached */}
-                      {overviewTab !== "overview" && (
-                        <div className="px-2 sm:px-3 py-1">
-                          <div className="tab-bar relative">
-                            {mainTabs.map((tab) => (
-                              <button
-                                key={tab.key}
-                                onClick={() => handleTabClick(tab.key)}
-                                className={`tab-item ${overviewTab === tab.key ? "active" : ""}`}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                    {/* Section chips — every sub-section is a clickable tab */}
+                    <div className="rounded-b-lg border border-t-0 border-white/[0.06] bg-[#0d1a1f] px-2 sm:px-3 py-1.5">
+                      <SectionChips
+                        groups={ANALYTICS_SECTIONS}
+                        activeSection={activeSection}
+                        onSectionClick={handleChipClick}
+                      />
                     </div>
                   </div>
 
-                  {/* Back button - Subtle, inline with content */}
-                  {overviewTab !== "overview" && (
-                    <div ref={detailsRef} className="flex items-center gap-2 pt-4 scroll-mt-sticky">
-                      <button
-                        onClick={() => clearUrlTab()}
-                        className="flex items-center gap-1 text-xs text-white/40 hover:text-white/70 transition-colors"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                        Overview
-                      </button>
-                      <span className="text-white/20">·</span>
-                      <span className="text-xs text-white/30">{selectedPool?.asset}</span>
-                      <span className="text-white/20">·</span>
-                      <span className="text-xs text-[#2dd4bf]/70">{getTabLabel(overviewTab)}</span>
-                    </div>
-                  )}
-
-                  {/* Details anchor for overview */}
-                  {overviewTab === "overview" && (
-                    <div ref={detailsRef} className="scroll-mt-sticky" />
-                  )}
-
-                  {/* Tab Content */}
-                  {overviewTab === "overview" && (
-                    <div
-                      className={`surface-elevated p-6 transition-all duration-300 ${
-                        isDetailsGlowing ? "ring-2 ring-[#2dd4bf]/50 shadow-lg shadow-[#2dd4bf]/10" : ""
-                      }`}
-                    >
-                      <OverviewTiles
-                        pool={selectedPool}
-                        onSelectTab={(tab) => {
-                          const tabMapping: Record<string, { tab: TabKey; section?: string }> = {
-                            rates: { tab: "yield", section: "rates" },
-                            history: { tab: "yield", section: "history" },
-                            markets: { tab: "yield", section: "markets" },
-                            liquidity: { tab: "risk", section: "liquidity" },
-                            concentration: { tab: "risk", section: "concentration" },
-                            liquidations: { tab: "risk", section: "liquidations" },
-                            risk: { tab: "risk", section: "overview" },
-                            activity: { tab: "activity" },
-                          };
-                          const mapping = tabMapping[tab];
-                          if (mapping) {
-                            handleTabClick(mapping.tab, mapping.section);
-                          } else {
-                            handleTabClick(tab as TabKey);
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                  {overviewTab === "yield" && (
-                    <YieldTab
-                      pool={selectedPool}
-                      pools={pools}
-                      initialSection={initialSection}
-                      onMarketClick={(id) => {
-                        setDeepbookPoolHistoryPoolId(id);
-                        setDeepbookPoolHistoryOpen(true);
-                      }}
-                    />
-                  )}
-                  {overviewTab === "risk" && (
-                    <RiskTab pool={selectedPool} initialSection={initialSection} />
-                  )}
-                  {overviewTab === "activity" && (
-                    <ActivityTab pool={selectedPool} initialSection={initialSection} />
-                  )}
-                  {overviewTab === "howItWorks" && (
-                    <div className="surface-elevated p-6">
-                      <HowItWorksPanel />
-                    </div>
-                  )}
+                  {/* ═══════════════════════════════════════════════════════════
+                      UNIFIED ANALYTICS — single scrollable page
+                      ═══════════════════════════════════════════════════════════ */}
+                  <PoolAnalytics
+                    pool={selectedPool}
+                    pools={pools}
+                    scrollCommand={scrollCommand}
+                    onActiveSectionChange={handleActiveSectionChange}
+                    onMarketClick={(id) => {
+                      setDeepbookPoolHistoryPoolId(id);
+                      setDeepbookPoolHistoryOpen(true);
+                    }}
+                  />
                 </div>
 
                 {/* ═══════════════════════════════════════════════════════════
@@ -572,7 +482,7 @@ export function PoolsPage() {
                       txStatus={txStatus}
                       onAmountChange={setPendingDepositAmount}
                       currentPositionBalance={selectedPoolDepositedBalance}
-                      onShowHowItWorks={() => handleTabClick("howItWorks")}
+                      onShowHowItWorks={() => setHowItWorksOpen(true)}
                     />
                     <PortfolioCard
                       userAddress={account?.address}
@@ -669,6 +579,16 @@ export function PoolsPage() {
         />
       </SlidePanel>
 
+      {/* How It Works */}
+      <SlidePanel
+        open={howItWorksOpen}
+        onClose={() => setHowItWorksOpen(false)}
+        title="How It Works"
+        width={"50vw"}
+      >
+        <HowItWorksPanel />
+      </SlidePanel>
+
       {/* Transaction Toast */}
       <TransactionToast
         isVisible={toast.isVisible}
@@ -687,7 +607,7 @@ export function PoolsPage() {
         explorerUrl={explorerUrl}
         error={txError}
         onViewActivity={() => {
-          setUrlTab("activity");
+          setUrlSection("supply-withdraw");
           setHistoryOpen(true);
         }}
       />

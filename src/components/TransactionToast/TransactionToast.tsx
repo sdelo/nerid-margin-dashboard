@@ -18,6 +18,8 @@ interface TransactionToastProps {
   explorerUrl: string;
   error?: string | null;
   onViewActivity?: () => void;
+  /** When true, shows a special celebration treatment for the first-ever deposit */
+  isFirstDeposit?: boolean;
 }
 
 function truncateTxHash(hash: string): string {
@@ -37,10 +39,14 @@ export function TransactionToast({
   explorerUrl,
   error,
   onViewActivity,
+  isFirstDeposit = false,
 }: TransactionToastProps) {
   const [copied, setCopied] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+
+  // Whether this is a first-deposit celebration moment
+  const isCelebration = isFirstDeposit && state === "finalized" && actionType === "deposit";
 
   // Auto-dismiss after 6 seconds when finalized (unless paused)
   useEffect(() => {
@@ -99,18 +105,27 @@ export function TransactionToast({
       <div
         className="relative overflow-hidden rounded-xl border shadow-2xl backdrop-blur-md"
         style={{
-          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 20, 30, 0.95) 100%)",
+          background: isCelebration
+            ? "linear-gradient(135deg, rgba(15, 23, 42, 0.97) 0%, rgba(20, 16, 8, 0.97) 100%)"
+            : "linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 20, 30, 0.95) 100%)",
           borderColor: state === "error" 
             ? "rgba(239, 68, 68, 0.3)" 
-            : state === "finalized" 
-              ? "rgba(16, 185, 129, 0.3)" 
-              : "rgba(45, 212, 191, 0.2)",
+            : isCelebration
+              ? "rgba(251, 191, 36, 0.4)"
+              : state === "finalized" 
+                ? "rgba(16, 185, 129, 0.3)" 
+                : "rgba(45, 212, 191, 0.2)",
+          boxShadow: isCelebration
+            ? "0 0 30px rgba(251, 191, 36, 0.15), 0 25px 50px -12px rgba(0, 0, 0, 0.5)"
+            : undefined,
         }}
       >
         {/* Progress bar for auto-dismiss */}
         {state === "finalized" && !isPaused && (
           <div 
-            className="absolute top-0 left-0 h-0.5 bg-emerald-500/50 animate-[shrink_6s_linear_forwards]"
+            className={`absolute top-0 left-0 h-0.5 animate-[shrink_6s_linear_forwards] ${
+              isCelebration ? "bg-amber-400/60" : "bg-emerald-500/50"
+            }`}
             style={{ width: "100%" }}
           />
         )}
@@ -131,7 +146,11 @@ export function TransactionToast({
                 </div>
               )}
               {state === "finalized" && (
-                <CheckCircleIcon className="w-5 h-5 text-emerald-400 animate-[scaleIn_200ms_ease-out]" />
+                isCelebration ? (
+                  <span className="text-lg animate-[scaleIn_200ms_ease-out]" role="img" aria-label="trophy">🏆</span>
+                ) : (
+                  <CheckCircleIcon className="w-5 h-5 text-emerald-400 animate-[scaleIn_200ms_ease-out]" />
+                )
               )}
               {state === "error" && (
                 <XCircleIcon className="w-5 h-5 text-red-400" />
@@ -139,12 +158,17 @@ export function TransactionToast({
 
               {/* Status text */}
               <div>
-                <span className="text-sm font-medium text-white">
+                <span className={`text-sm font-medium ${isCelebration ? "text-amber-300" : "text-white"}`}>
                   {state === "pending" && "Submitting transaction…"}
                   {state === "submitted" && "Transaction submitted"}
-                  {state === "finalized" && `${actionLabel} finalized`}
+                  {state === "finalized" && (isCelebration ? "First deposit — welcome!" : `${actionLabel} finalized`)}
                   {state === "error" && "Transaction failed"}
                 </span>
+                {isCelebration && (
+                  <span className="block text-[11px] text-amber-400/60 mt-0.5 animate-[fadeIn_500ms_ease-out_300ms_both]">
+                    You're officially a Leva supplier ✨
+                  </span>
+                )}
               </div>
             </div>
 

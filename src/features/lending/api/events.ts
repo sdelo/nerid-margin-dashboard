@@ -90,11 +90,17 @@ export interface MarginPoolCreatedEventResponse extends ApiEventResponse<{
   config_json: unknown; // JSON string or object
 }> {}
 
-// Deepbook Pool Updated Event Response
+// Deepbook Pool Updated Event Response (from margin_pool.move - enable/disable for loan)
 export interface DeepbookPoolUpdatedEventResponse extends ApiEventResponse<{
   margin_pool_id: string;
   deepbook_pool_id: string;
   pool_cap_id: string;
+  enabled: boolean;
+}> {}
+
+// Deepbook Pool Updated Registry Event Response (from margin_registry.move - enable/disable pool)
+export interface DeepbookPoolUpdatedRegistryEventResponse extends ApiEventResponse<{
+  pool_id: string;
   enabled: boolean;
 }> {}
 
@@ -324,12 +330,21 @@ export async function fetchMarginPoolCreated(
 }
 
 /**
- * Fetch deepbook pool updated events
+ * Fetch deepbook pool updated events (from margin_pool - enable/disable for loan)
  */
 export async function fetchDeepbookPoolUpdated(
   params?: QueryParams
 ): Promise<DeepbookPoolUpdatedEventResponse[]> {
   return apiClient.get<DeepbookPoolUpdatedEventResponse[]>(`/deepbook_pool_updated${buildQuery(params)}`);
+}
+
+/**
+ * Fetch deepbook pool updated registry events (from margin_registry - enable/disable pool)
+ */
+export async function fetchDeepbookPoolUpdatedRegistry(
+  params?: QueryParams
+): Promise<DeepbookPoolUpdatedRegistryEventResponse[]> {
+  return apiClient.get<DeepbookPoolUpdatedRegistryEventResponse[]>(`/deepbook_pool_updated_registry${buildQuery(params)}`);
 }
 
 /**
@@ -442,24 +457,48 @@ export async function fetchDeepbookPoolConfigUpdated(
 }
 
 /**
- * Get the latest config for a deepbook pool by merging registered and config updated events
+ * Get the latest config for a deepbook pool by merging registered, config updated,
+ * and registry enable/disable events.
+ *
+ * The Move contract creates pool configs with `enabled: false` and enables them
+ * separately via `enable_deepbook_pool`, which emits a `DeepbookPoolUpdated`
+ * (registry) event — not a `DeepbookPoolConfigUpdated` event. We must check
+ * all three event sources to get the correct `enabled` status.
  */
 export async function fetchLatestDeepbookPoolConfig(
   poolId: string
 ): Promise<DeepbookPoolRegisteredEventResponse | DeepbookPoolConfigUpdatedEventResponse | null> {
   try {
-    const [registeredEvents, configUpdatedEvents] = await Promise.all([
+    const [registeredEvents, configUpdatedEvents, registryUpdateEvents] = await Promise.all([
       fetchDeepbookPoolRegistered({ pool_id: poolId }),
       fetchDeepbookPoolConfigUpdated({ pool_id: poolId }),
+      fetchDeepbookPoolUpdatedRegistry({ pool_id: poolId }),
     ]);
 
-    // Combine and sort by timestamp
-    const allEvents = [
+    // Get the latest config (from registered or config_updated)
+    const configEvents = [
       ...registeredEvents.map(e => ({ ...e, source: 'registered' as const })),
       ...configUpdatedEvents.map(e => ({ ...e, source: 'updated' as const })),
     ].sort((a, b) => b.onchain_timestamp - a.onchain_timestamp);
 
-    return allEvents[0] || null;
+    const latestConfig = configEvents[0] || null;
+    if (!latestConfig) return null;
+
+    // Check if there's a more recent enable/disable event from the registry.
+    // enable_deepbook_pool / disable_deepbook_pool only emit DeepbookPoolUpdated
+    // (registry), which carries just { pool_id, enabled, timestamp }.
+    const latestRegistryUpdate = registryUpdateEvents
+      .sort((a, b) => b.onchain_timestamp - a.onchain_timestamp)[0];
+
+    if (latestRegistryUpdate && latestRegistryUpdate.onchain_timestamp > latestConfig.onchain_timestamp) {
+      // Override the enabled status from the more recent registry event
+      latestConfig.config_json = {
+        ...latestConfig.config_json,
+        enabled: latestRegistryUpdate.enabled,
+      };
+    }
+
+    return latestConfig;
   } catch (err) {
     console.error(`Error in fetchLatestDeepbookPoolConfig for ${poolId}:`, err);
     throw err;

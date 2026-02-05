@@ -7,6 +7,7 @@ import { type TimeRange, timeRangeToParams } from '../api/types';
 import TimeRangeSelector from '../../../components/TimeRangeSelector';
 import { useAppNetwork } from '../../../context/AppNetworkContext';
 import { BadDebtTimeline } from './BadDebtTimeline';
+import { LiquidationInsights } from './LiquidationInsights';
 
 interface LiquidatorStats {
   address: string;
@@ -63,6 +64,17 @@ function formatUsd(value: number): string {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
   return `$${value.toFixed(0)}`;
+}
+
+/**
+ * Format a small on-chain value for display in the table.
+ * Shows "<0.01" for tiny non-zero amounts instead of rounding to 0.
+ */
+function formatSmallValue(raw: string): string {
+  const val = parseFloat(raw) / 1e9;
+  if (val === 0) return '0';
+  if (val > 0 && val < 0.01) return '<0.01';
+  return val.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 /**
@@ -536,6 +548,11 @@ export function ProtocolProofSection() {
       <BadDebtTimeline liquidations={liquidations} isLoading={isLoading} />
 
       {/* ═══════════════════════════════════════════════════════════════════
+          LIQUIDATION INSIGHTS - Pool breakdown, distributions, heatmap
+      ═══════════════════════════════════════════════════════════════════ */}
+      <LiquidationInsights liquidations={liquidations} isLoading={isLoading} />
+
+      {/* ═══════════════════════════════════════════════════════════════════
           VIEW TOGGLE - History vs Leaderboard
       ═══════════════════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-2">
@@ -792,23 +809,17 @@ export function ProtocolProofSection() {
                             </a>
                           </td>
                           <td className="py-3 px-4 text-right text-white font-medium tabular-nums">
-                            {(parseFloat(liq.liquidation_amount) / 1e9).toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatSmallValue(liq.liquidation_amount)}
                           </td>
                           <td className="py-3 px-4 text-right text-emerald-400 tabular-nums">
-                            {(parseFloat(liq.pool_reward) / 1e9).toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatSmallValue(liq.pool_reward)}
                           </td>
                           <td
                             className={`py-3 px-4 text-right tabular-nums ${
                               hasBadDebt ? 'text-rose-400 font-medium' : 'text-white/30'
                             }`}
                           >
-                            {(parseFloat(liq.pool_default) / 1e9).toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatSmallValue(liq.pool_default)}
                           </td>
                           <td className="py-3 px-4 text-center">
                             <a
