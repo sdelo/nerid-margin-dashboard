@@ -50,6 +50,11 @@ export const TOOLTIP_DEFINITIONS = {
   // Liquidation metrics
   estimatedProfit: "Estimated net profit = Liquidation Bonus − Gas (~$0.50) − Slippage (~0.3% of debt). Actual profit may vary based on market conditions and execution.",
   positionDirection: "LONG: Net long base asset—hurts when price drops. SHORT: Net short base asset—benefits when price drops.",
+  
+  // Liquidation history metrics
+  liquidationVolume: "Total debt repaid across all liquidations, denominated in each lending pool's asset (e.g. SUI or USDC). This is the sum of all liquidation_amount values, not the collateral seized.",
+  liquidationRewards: "Total rewards earned by the lending pools from liquidations. This is the pool's cut (typically 3%) taken on top of the debt repaid.",
+  liquidationBadDebt: "Debt that the lending pool could not recover because the position's collateral was insufficient. The pool absorbs this loss. Zero bad debt is ideal.",
 } as const;
 
 export type TooltipKey = keyof typeof TOOLTIP_DEFINITIONS;

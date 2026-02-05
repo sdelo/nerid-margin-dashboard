@@ -8,6 +8,7 @@ import TimeRangeSelector from '../../../components/TimeRangeSelector';
 import { useAppNetwork } from '../../../context/AppNetworkContext';
 import { BadDebtTimeline } from './BadDebtTimeline';
 import { LiquidationInsights } from './LiquidationInsights';
+import { InfoTooltip } from '../../../components/InfoTooltip';
 
 interface LiquidatorStats {
   address: string;
@@ -61,9 +62,11 @@ function formatVolume(value: number): string {
  * Format USD value
  */
 function formatUsd(value: number): string {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-  return `$${value.toFixed(0)}`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+  if (value >= 1) return `$${value.toFixed(1)}`;
+  if (value > 0) return '<$0.01';
+  return '$0';
 }
 
 /**
@@ -398,10 +401,13 @@ export function ProtocolProofSection() {
               {isLoading ? (
                 <div className="h-9 w-16 mx-auto bg-white/10 rounded animate-pulse" />
               ) : (
-                formatVolume(lifetimeMetrics.totalVolume)
+                formatUsd(lifetimeMetrics.totalVolume)
               )}
             </div>
-            <div className="text-xs text-white/50 mt-1">Volume Processed</div>
+            <div className="text-xs text-white/50 mt-1 flex items-center justify-center">
+              Volume Processed
+              <InfoTooltip tooltip="liquidationVolume" />
+            </div>
           </div>
 
           <div className="text-center">
@@ -409,10 +415,13 @@ export function ProtocolProofSection() {
               {isLoading ? (
                 <div className="h-9 w-16 mx-auto bg-white/10 rounded animate-pulse" />
               ) : (
-                formatVolume(lifetimeMetrics.totalRewards)
+                formatUsd(lifetimeMetrics.totalRewards)
               )}
             </div>
-            <div className="text-xs text-white/50 mt-1">Rewards Paid</div>
+            <div className="text-xs text-white/50 mt-1 flex items-center justify-center">
+              Rewards Paid
+              <InfoTooltip tooltip="liquidationRewards" />
+            </div>
           </div>
 
           <div className="text-center">
@@ -424,12 +433,15 @@ export function ProtocolProofSection() {
               {isLoading ? (
                 <div className="h-9 w-16 mx-auto bg-white/10 rounded animate-pulse" />
               ) : lifetimeMetrics.totalBadDebt > 0 ? (
-                formatVolume(lifetimeMetrics.totalBadDebt)
+                formatUsd(lifetimeMetrics.totalBadDebt)
               ) : (
-                '0'
+                '$0'
               )}
             </div>
-            <div className="text-xs text-white/50 mt-1">Bad Debt</div>
+            <div className="text-xs text-white/50 mt-1 flex items-center justify-center">
+              Bad Debt
+              <InfoTooltip tooltip="liquidationBadDebt" />
+            </div>
           </div>
         </div>
 

@@ -490,8 +490,10 @@ export async function fetchLatestDeepbookPoolConfig(
     const latestRegistryUpdate = registryUpdateEvents
       .sort((a, b) => b.onchain_timestamp - a.onchain_timestamp)[0];
 
-    if (latestRegistryUpdate && latestRegistryUpdate.onchain_timestamp > latestConfig.onchain_timestamp) {
-      // Override the enabled status from the more recent registry event
+    if (latestRegistryUpdate && latestRegistryUpdate.onchain_timestamp >= latestConfig.onchain_timestamp) {
+      // Override the enabled status from the more recent registry event.
+      // Use >= because register + enable can happen in the same PTB
+      // (same clock.timestamp_ms()), and the enable event is authoritative.
       latestConfig.config_json = {
         ...latestConfig.config_json,
         enabled: latestRegistryUpdate.enabled,
