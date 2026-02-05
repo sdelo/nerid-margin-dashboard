@@ -1,9 +1,13 @@
 import React from 'react';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
-import { fetchMarginPool } from '../api/poolData';
+import { fetchMarginPoolsBatched } from '../api/poolData';
 import { fetchUserPositions } from '../api/userPositions';
 import { getMarginPools, type NetworkType } from '../config/contracts';
 import type { PoolOverview, UserPosition } from '../features/lending/types';
+
+// Auto-refresh interval in milliseconds
+// Using 30s instead of 15s to reduce load on RPC endpoints
+const AUTO_REFRESH_INTERVAL_MS = 30_000;
 
 export type AllPoolsResult = {
   pools: PoolOverview[];
@@ -33,18 +37,15 @@ export function useAllPools(userAddress?: string): AllPoolsResult {
       
       const networkType = network as NetworkType;
       const poolConfigs = getMarginPools(networkType);
+      const poolIds = poolConfigs.map(config => config.poolId);
       
-      // Fetch all pools and coin metadata in parallel
-      const poolPromises = poolConfigs.map(config => 
-        fetchMarginPool(suiClient, config.poolId, networkType)
-      );
-      
+      // Fetch all pools in a single batched RPC call + metadata in parallel
       const metadataPromises = poolConfigs.map(config =>
         suiClient.getCoinMetadata({ coinType: config.poolType }).catch(() => null)
       );
       
       const [poolResults, metadataResults] = await Promise.all([
-        Promise.all(poolPromises),
+        fetchMarginPoolsBatched(suiClient, poolIds, networkType),
         Promise.all(metadataPromises),
       ]);
       
@@ -89,9 +90,9 @@ export function useAllPools(userAddress?: string): AllPoolsResult {
     fetchData(false);
   }, [fetchData]);
 
-  // Auto-refresh every 15 seconds
+  // Auto-refresh periodically to keep data fresh
   React.useEffect(() => {
-    const interval = setInterval(() => fetchData(true), 15000);
+    const interval = setInterval(() => fetchData(true), AUTO_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 

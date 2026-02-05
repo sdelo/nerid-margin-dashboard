@@ -4,7 +4,7 @@ import { DocumentDuplicateIcon, ArrowTopRightOnSquareIcon } from "@heroicons/rea
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 
 export type TransactionToastState = "pending" | "submitted" | "finalized" | "error";
-export type TransactionActionType = "deposit" | "withdraw";
+export type TransactionActionType = "deposit" | "withdraw" | "liquidate";
 
 interface TransactionToastProps {
   isVisible: boolean;
@@ -79,8 +79,8 @@ export function TransactionToast({
   if (!isVisible) return null;
 
   const explorerTxUrl = txDigest ? `${explorerUrl}/txblock/${txDigest}` : "";
-  const actionLabel = actionType === "deposit" ? "Deposit" : "Withdrawal";
-  const actionPastTense = actionType === "deposit" ? "deposited" : "withdrawn";
+  const actionLabel = actionType === "deposit" ? "Deposit" : actionType === "withdraw" ? "Withdrawal" : "Liquidation";
+  const actionPastTense = actionType === "deposit" ? "deposited" : actionType === "withdraw" ? "withdrawn" : "liquidated";
 
   // Build description line
   const description = amount && asset 

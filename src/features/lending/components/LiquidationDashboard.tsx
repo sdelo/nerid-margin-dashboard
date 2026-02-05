@@ -3,9 +3,11 @@ import { useAtRiskPositions, type AtRiskPosition } from "../../../hooks/useAtRis
 import { LiveRiskMonitor } from "./LiveRiskMonitor";
 import { ProtocolProofSection } from "./ProtocolProofSection";
 import { TransactionDetailsModal } from "../../../components/TransactionButton/TransactionDetailsModal";
-import { CONTRACTS } from "../../../config/contracts";
-import { useSuiClientContext } from "@mysten/dapp-kit";
+import { CONTRACTS, type NetworkType } from "../../../config/contracts";
+import { useSuiClientContext, useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { ScenarioProvider } from "../../../context/ScenarioContext";
+import { buildLiquidateTransaction } from "../../../lib/suiTransactions";
+import { TransactionToast, type TransactionToastState } from "../../../components/TransactionToast";
 
 /**
  * Unified Liquidation Center
@@ -38,9 +40,22 @@ type ExploreTab = 'monitor' | 'proof';
 
 export function LiquidationDashboard() {
   const { network } = useSuiClientContext();
+  const suiClient = useSuiClient();
+  const account = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
+  
   const [activeTab, setActiveTab] = React.useState<ExploreTab>('monitor');
   const [selectedPosition, setSelectedPosition] = React.useState<AtRiskPosition | null>(null);
   const [showTxModal, setShowTxModal] = React.useState(false);
+  const [isLiquidating, setIsLiquidating] = React.useState(false);
+  const [liquidationError, setLiquidationError] = React.useState<string | null>(null);
+  
+  // Transaction toast state
+  const [toastState, setToastState] = React.useState<TransactionToastState>("pending");
+  const [toastVisible, setToastVisible] = React.useState(false);
+  const [toastTxDigest, setToastTxDigest] = React.useState<string | undefined>();
+  const [toastError, setToastError] = React.useState<string | null>(null);
+  const [toastAmount, setToastAmount] = React.useState<string | undefined>();
 
   const contracts = network === 'mainnet' ? CONTRACTS.mainnet : CONTRACTS.testnet;
 
@@ -91,14 +106,105 @@ export function LiquidationDashboard() {
   const handleLiquidate = (position: AtRiskPosition) => {
     setSelectedPosition(position);
     setShowTxModal(true);
+    setLiquidationError(null);
   };
 
+  const executeLiquidation = React.useCallback(async () => {
+    if (!selectedPosition || !account) {
+      setLiquidationError("No position selected or wallet not connected");
+      return;
+    }
+
+    setIsLiquidating(true);
+    setLiquidationError(null);
+    
+    // Show pending toast immediately
+    setToastState("pending");
+    setToastVisible(true);
+    setToastTxDigest(undefined);
+    setToastError(null);
+
+    try {
+      // Calculate repay amount based on position debt
+      // For quote debt (most common), use quote decimals (6 for USDC)
+      // For base debt, use base decimals (9 for SUI)
+      const hasQuoteDebt = selectedPosition.quoteDebt > 0;
+      const decimals = hasQuoteDebt ? 6 : 9;
+      const debtAmount = hasQuoteDebt ? selectedPosition.quoteDebt : selectedPosition.baseDebt;
+      
+      // Repay the full debt amount (the contract will handle partial liquidations)
+      const repayAmount = BigInt(Math.ceil(debtAmount * Math.pow(10, decimals)));
+
+      const tx = await buildLiquidateTransaction({
+        position: selectedPosition,
+        repayAmount,
+        owner: account.address,
+        network: network as NetworkType,
+        suiClient,
+      });
+
+      const result = await signAndExecute({ 
+        transaction: tx, 
+        chain: `sui:${network}` 
+      });
+
+      // Wait for transaction confirmation
+      const txResult = await suiClient.waitForTransaction({
+        digest: result.digest,
+        options: { showEffects: true },
+      });
+
+      // Check if transaction was successful
+      const status = txResult.effects?.status?.status;
+      if (status === 'failure') {
+        const error = txResult.effects?.status?.error || 'Transaction failed';
+        throw new Error(error);
+      }
+
+      // Success - close modal and refresh positions
+      setShowTxModal(false);
+      setSelectedPosition(null);
+      refetchPositions();
+      
+      // Show success toast
+      setToastState("finalized");
+      setToastTxDigest(result.digest);
+      setToastAmount(formatUsd(selectedPosition.totalDebtUsd));
+      
+      console.log(`Liquidation successful! TX: ${result.digest}`);
+    } catch (error: any) {
+      console.error("Liquidation failed:", error);
+      
+      // Parse the error message for better UX
+      let errorMessage = error.message || "Liquidation failed";
+      
+      // Handle common Move abort errors
+      if (errorMessage.includes('MoveAbort') && errorMessage.includes('9')) {
+        errorMessage = "Position is no longer liquidatable. The price may have moved or another liquidator got there first.";
+      } else if (errorMessage.includes('MoveAbort') && errorMessage.includes('13')) {
+        errorMessage = "Repay amount too low. Try with a larger amount.";
+      } else if (errorMessage.includes('InsufficientGas')) {
+        errorMessage = "Insufficient gas. Make sure you have enough SUI for transaction fees.";
+      } else if (errorMessage.includes('rejected') || errorMessage.includes('denied')) {
+        errorMessage = "Transaction was rejected by wallet.";
+      }
+      
+      setLiquidationError(errorMessage);
+      
+      // Show error toast
+      setToastState("error");
+      setToastError(errorMessage);
+    } finally {
+      setIsLiquidating(false);
+    }
+  }, [selectedPosition, account, network, suiClient, signAndExecute, refetchPositions]);
+
   const transactionInfo = selectedPosition ? {
-    action: 'Liquidate Position',
+    action: 'Attempt Liquidation',
     packageId: contracts.MARGIN_PACKAGE_ID,
     module: 'margin_manager',
     function: 'liquidate',
-    summary: `Liquidate position with ${formatUsd(selectedPosition.totalDebtUsd)} debt. Est. profit: ${formatUsd(calculateNetProfit(selectedPosition))}`,
+    summary: `Attempt to liquidate position with ${formatUsd(selectedPosition.totalDebtUsd)} debt. Est. profit: ${formatUsd(calculateNetProfit(selectedPosition))}. ⚠️ May fail if price moved.`,
     sourceCodeUrl: `https://suivision.xyz/package/${contracts.MARGIN_PACKAGE_ID}`,
     arguments: [
       { name: 'Position', value: formatAddress(selectedPosition.marginManagerId) },
@@ -251,29 +357,29 @@ export function LiquidationDashboard() {
           PROFIT OPPORTUNITY BANNER - Only shows if liquidatable positions exist
       ═══════════════════════════════════════════════════════════════════ */}
       {liquidatableCount > 0 && (
-        <div className="bg-gradient-to-r from-rose-500/20 to-rose-500/10 rounded-xl border border-rose-500/30 p-4">
+        <div className="bg-gradient-to-r from-orange-500/15 to-orange-500/5 rounded-xl border border-orange-500/30 p-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-rose-500/30 flex items-center justify-center">
-                <svg className="w-5 h-5 text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-orange-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-base font-semibold text-rose-200">
-                  {liquidatableCount} Position{liquidatableCount > 1 ? 's' : ''} Ready to Liquidate
+                <h3 className="text-base font-semibold text-orange-200">
+                  {liquidatableCount} Position{liquidatableCount > 1 ? 's' : ''} At Risk
                 </h3>
                 <p className="text-sm text-white/60">
-                  Potential profit: <span className="text-emerald-400 font-semibold">{formatUsd(metrics.totalProfit)}</span>
-                  {' '}· Total debt: {formatUsd(metrics.totalLiquidatableDebt)}
+                  Total debt: {formatUsd(metrics.totalLiquidatableDebt)}
+                  <span className="text-white/40 ml-2">· May fail if price moves</span>
                 </p>
               </div>
             </div>
             <button
               onClick={() => setActiveTab('monitor')}
-              className="px-4 py-2 rounded-lg text-sm font-semibold bg-rose-500 hover:bg-rose-400 text-white transition-all flex items-center gap-2"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 transition-all flex items-center gap-2"
             >
-              View Opportunities
+              View Positions
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -364,16 +470,34 @@ export function LiquidationDashboard() {
           onClose={() => {
             setShowTxModal(false);
             setSelectedPosition(null);
+            setLiquidationError(null);
           }}
-          onContinue={() => {
-            // TODO: Implement actual liquidation transaction
-            setShowTxModal(false);
-            setSelectedPosition(null);
+          onContinue={executeLiquidation}
+          transactionInfo={{
+            ...transactionInfo,
+            summary: liquidationError 
+              ? `Error: ${liquidationError}` 
+              : isLiquidating 
+                ? "Updating oracle prices & executing liquidation..." 
+                : transactionInfo.summary,
           }}
-          transactionInfo={transactionInfo}
-          disabled={!selectedPosition?.isLiquidatable}
+          disabled={!selectedPosition?.isLiquidatable || isLiquidating || !account}
         />
       )}
+
+      {/* Transaction Toast */}
+      <TransactionToast
+        isVisible={toastVisible}
+        onDismiss={() => setToastVisible(false)}
+        state={toastState}
+        actionType="liquidate"
+        amount={toastAmount}
+        asset="debt"
+        poolName="Position liquidated"
+        txDigest={toastTxDigest}
+        explorerUrl={`https://suivision.xyz`}
+        error={toastError}
+      />
     </div>
     </ScenarioProvider>
   );

@@ -20,15 +20,20 @@
     "@mysten/bcs": "^1.8.0",
     "@mysten/dapp-kit": "^0.18.0",
     "@mysten/sui": "1.38.0",
+    "@pythnetwork/hermes-client": "^2.1.0",
+    "@pythnetwork/pyth-sui-js": "^2.4.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@tanstack/react-query": "^5.89.0",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
+    "axios": "^1.13.4",
+    "buffer": "^6.0.3",
     "date-fns": "^4.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.9.4",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "vite-plugin-node-polyfills": "^0.25.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

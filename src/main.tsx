@@ -28,9 +28,32 @@ function Root() {
   return <App />;
 }
 
+// Get RPC URLs - prefer custom RPC endpoints from env vars to avoid rate limits
+// Public fullnodes have aggressive rate limits and may return 503 errors
+// 
+// Options:
+// 1. VITE_SUI_MAINNET_RPC_URL - Direct RPC URL (use with Shinami domain restrictions)
+// 2. VITE_USE_RPC_PROXY=true - Use /api/sui-rpc proxy (API key stays server-side)
+const getTestnetRpcUrl = () => {
+  const customUrl = import.meta.env.VITE_SUI_TESTNET_RPC_URL;
+  return customUrl || getFullnodeUrl("testnet");
+};
+
+const getMainnetRpcUrl = () => {
+  // If using the proxy, point to the Vercel API route
+  if (import.meta.env.VITE_USE_RPC_PROXY === "true") {
+    // In production, this resolves to /api/sui-rpc
+    // In development, you'd need to run vercel dev or use the direct URL
+    return "/api/sui-rpc";
+  }
+  
+  const customUrl = import.meta.env.VITE_SUI_MAINNET_RPC_URL;
+  return customUrl || getFullnodeUrl("mainnet");
+};
+
 const { networkConfig } = createNetworkConfig({
   testnet: {
-    url: getFullnodeUrl("testnet"),
+    url: getTestnetRpcUrl(),
     mvr: {
       overrides: {
         packages: {
@@ -40,7 +63,7 @@ const { networkConfig } = createNetworkConfig({
     },
   },
   mainnet: {
-    url: getFullnodeUrl("mainnet"),
+    url: getMainnetRpcUrl(),
     mvr: {
       overrides: {
         packages: {

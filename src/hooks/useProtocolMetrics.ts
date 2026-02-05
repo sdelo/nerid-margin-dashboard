@@ -2,7 +2,7 @@ import React from 'react';
 import { useSuiClient, useSuiClientContext } from '@mysten/dapp-kit';
 import { fetchMarginManagerCreated, fetchLiquidations } from '../features/lending/api/events';
 import { getMarginPools, type NetworkType } from '../config/contracts';
-import { fetchMarginPool } from '../api/poolData';
+import { fetchMarginPoolsBatched } from '../api/poolData';
 import { useAppNetwork } from '../context/AppNetworkContext';
 
 export interface ProtocolMetrics {
@@ -36,12 +36,10 @@ export function useProtocolMetrics(): ProtocolMetrics {
     try {
       const networkType = network as NetworkType;
       const poolConfigs = getMarginPools(networkType);
+      const poolIds = poolConfigs.map(config => config.poolId);
       
-      // Fetch all pool states for TVL and total borrowed
-      const poolPromises = poolConfigs.map(config => 
-        fetchMarginPool(suiClient, config.poolId, networkType)
-      );
-      const pools = await Promise.all(poolPromises);
+      // Fetch all pool states in a single batched RPC call
+      const pools = await fetchMarginPoolsBatched(suiClient, poolIds, networkType);
 
       // Calculate TVL (total supply across pools)
       const totalSupply = pools.reduce((sum, pool) => sum + (pool?.state.supply || 0), 0);

@@ -116,7 +116,7 @@ function ScenarioSummaryStrip({
         <div className="flex items-center gap-5">
           {/* Would Liquidate */}
           <div className="text-right">
-            <div className="text-[9px] text-white/40 uppercase tracking-wider">Would Liq</div>
+            <div className="text-[9px] text-white/40 uppercase tracking-wider">At Risk</div>
             <div className={`text-sm font-bold tabular-nums ${shockedCounts.liquidatable > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
               {shockedCounts.liquidatable}
               {newLiquidations > 0 && (
@@ -232,9 +232,9 @@ function BufferDistributionStrip({
       count: displayCounts.liquidatable,
       originalCount: counts.liquidatable,
       pct: (displayCounts.liquidatable / total) * 100,
-      color: 'bg-rose-500',
-      hoverColor: 'hover:bg-rose-400',
-      textColor: 'text-rose-400',
+      color: 'bg-orange-500',
+      hoverColor: 'hover:bg-orange-400',
+      textColor: 'text-orange-400',
     },
   ];
 
@@ -443,8 +443,8 @@ function ShockPreview({
           
           <div className="flex items-center gap-3 text-xs">
             {newLiquidations > 0 && (
-              <span className="text-rose-400">
-                <span className="font-bold">+{newLiquidations}</span> liquidatable
+              <span className="text-orange-400">
+                <span className="font-bold">+{newLiquidations}</span> at risk
               </span>
             )}
             {newCritical > 0 && (

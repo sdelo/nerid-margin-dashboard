@@ -20,6 +20,13 @@ export const CONTRACTS = {
     // Referrals
     SUI_MARGIN_POOL_REFERRAL: "0x8b8b5d1cd1b703a5788f1b951e8f4c6f8bcbad37d58b8280bd58b29c692683c0",
     DBUSDC_MARGIN_POOL_REFERRAL: "0x8f140aca65c9233603edec60708b9c8b6ac68aef5d436732b907d26ca41bfce6",
+
+    // DeepBook v3 Pool (SUI/DBUSDC) - for liquidations
+    DEEPBOOK_SUI_DBUSDC_POOL_ID: "", // TODO: Add testnet DeepBook pool ID
+    
+    // Pyth Oracle PriceInfoObject IDs
+    SUI_ORACLE_ID: "", // TODO: Add testnet oracle ID
+    DBUSDC_ORACLE_ID: "", // TODO: Add testnet oracle ID
   },
   mainnet: {
     MARGIN_PACKAGE_ID: "0x97d9473771b01f77b0940c589484184b49f6444627ec121314fae6a6d36fb86b",
@@ -48,7 +55,25 @@ export const CONTRACTS = {
     USDC_MARGIN_POOL_REFERRAL: "0xf71910d2f1b6aaa25588111d8339e55581d28cfaa913a4ac95913428bd6481bb",
     DEEP_MARGIN_POOL_REFERRAL: "0xbeb73a813a67d70a2ede938b23809b0d2de74b653ab6f0d94d89ac4b45e21990",
     WAL_MARGIN_POOL_REFERRAL: "0xd61c2d145cadcd595d6176b7075cf2540a2ff0d01fd41e80f7c97ece2b8937be",
+
+    // DeepBook v3 Pools - for liquidations
+    DEEPBOOK_SUI_USDC_POOL_ID: "0xe05dafb5133bcffb8d59f4e12465dc0e9faeaa05e3e342a08fe135800e3e4407",
+    
+    // Pyth Oracle PriceInfoObject IDs (mainnet)
+    SUI_ORACLE_ID: "0x801dbc2f0053d34734814b2d6df491ce7807a725fe9a01ad74a07e9c51396c37",
+    USDC_ORACLE_ID: "0x5dec622733a204ca27f5a90d8c2fad453cc6665186fd5dff13a83d0b6c9027ab",
+    
+    // Pyth State IDs (for updating prices)
+    PYTH_STATE_ID: "0x1f9310238ee9298fb703c3419030b35b22bb1cc37113e3bb5007c99aec79e5b8",
+    WORMHOLE_STATE_ID: "0xaeab97f96cf9877fee2883315d459552b2b921edc16d7ceac6eab944dd88919c",
   },
+} as const;
+
+// Pyth Price Feed IDs (same for mainnet and testnet)
+// From https://docs.pyth.network/price-feeds/price-feeds
+export const PYTH_PRICE_FEEDS = {
+  SUI_USD: "0x23d7315113f5b1d3ba7a83604c44b94d79f4fd69af77f804fc7f920a6dc65744",
+  USDC_USD: "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a",
 } as const;
 
 // Legacy exports for backward compatibility

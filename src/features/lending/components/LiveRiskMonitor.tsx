@@ -34,10 +34,10 @@ function getStatusBadge(band: RiskBand): { label: string; bgColor: string; textC
   switch (band) {
     case 'liquidatable':
       return {
-        label: 'LIQUIDATABLE',
-        bgColor: 'bg-rose-500',
+        label: 'AT RISK',
+        bgColor: 'bg-orange-500',
         textColor: 'text-white',
-        borderColor: 'border-rose-400',
+        borderColor: 'border-orange-400',
       };
     case 'critical':
       return {
@@ -386,7 +386,7 @@ export function LiveRiskMonitor({
           <div className="flex items-center gap-1 p-1 bg-white/[0.03] rounded-lg border border-white/[0.06]">
             {[
               { key: 'all' as RiskFilter, label: 'All', count: statusCounts.all },
-              { key: 'liquidatable' as RiskFilter, label: 'Liquidatable', count: statusCounts.liquidatable, color: 'text-rose-400' },
+              { key: 'liquidatable' as RiskFilter, label: 'At Risk', count: statusCounts.liquidatable, color: 'text-orange-400' },
               { key: 'critical' as RiskFilter, label: 'Critical', count: statusCounts.critical, color: 'text-amber-400' },
               { key: 'watch' as RiskFilter, label: 'Watch', count: statusCounts.watch, color: 'text-teal-400' },
               { key: 'safe' as RiskFilter, label: 'Safe', count: statusCounts.safe, color: 'text-emerald-400' },
@@ -521,7 +521,7 @@ export function LiveRiskMonitor({
                   <React.Fragment key={position.marginManagerId}>
                     <tr
                       className={`border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer ${
-                        position.isLiquidatable ? 'bg-rose-500/5' : 
+                        position.isLiquidatable ? 'bg-orange-500/5' : 
                         scenario?.wouldLiquidate ? 'bg-rose-500/[0.03]' : ''
                       }`}
                       onClick={() => setExpandedRow(isExpanded ? null : position.marginManagerId)}
@@ -681,12 +681,13 @@ export function LiveRiskMonitor({
                               e.stopPropagation();
                               onLiquidate(position);
                             }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500 hover:bg-rose-400 text-white transition-all flex items-center gap-1.5 mx-auto"
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 transition-all flex items-center gap-1.5 mx-auto whitespace-nowrap"
+                            title="Attempt liquidation - may fail if price moved"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                            Liquidate
+                            Try Liquidation
                           </button>
                         ) : (
                           <button
@@ -903,8 +904,8 @@ export function LiveRiskMonitor({
       <div className="flex items-center justify-between text-[10px] text-white/30 flex-wrap gap-2">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            Liquidatable
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            At Risk
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
