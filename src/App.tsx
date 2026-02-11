@@ -18,15 +18,6 @@ const router = createBrowserRouter([
         index: true,
         element: <PoolsPage />,
       },
-      // Future routes can be added here:
-      // {
-      //   path: "pools/:poolId",
-      //   element: <PoolDetailPage />,
-      // },
-      // {
-      //   path: "analytics",
-      //   element: <AnalyticsPage />,
-      // },
     ],
   },
   {

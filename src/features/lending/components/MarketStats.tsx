@@ -12,11 +12,11 @@ import { fetchOHLCV, fetchPairSummary, parseCandles, type MarketSummary, type Pa
 import { useChartFirstRender, useStableGradientId } from '../../../components/charts/StableChart';
 
 interface MarketStatsProps {
-  poolName?: string; // e.g., "SUI_DBUSDC"
+  poolName?: string; // e.g., "SUI_USDC"
   compact?: boolean;
 }
 
-export function MarketStats({ poolName = 'SUI_DBUSDC', compact = false }: MarketStatsProps) {
+export function MarketStats({ poolName = 'SUI_USDC', compact = false }: MarketStatsProps) {
   // Fetch OHLCV data (hourly candles, last 48 hours)
   const { data: candles, isLoading: candlesLoading } = useQuery({
     queryKey: ['ohlcv', poolName],

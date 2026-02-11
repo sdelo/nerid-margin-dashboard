@@ -1,50 +1,15 @@
 import React from "react";
 import type { PoolOverview } from "../types";
-import { useSuiClient } from "@mysten/dapp-kit";
-import { MarginPool } from "../../../contracts/deepbook_margin/deepbook_margin/margin_pool";
 
 interface LiquidityHealthCheckProps {
   pool: PoolOverview;
+  vaultBalance?: number | null;
 }
 
-export function LiquidityHealthCheck({ pool }: LiquidityHealthCheckProps) {
-  const suiClient = useSuiClient();
-  const [vaultBalance, setVaultBalance] = React.useState<number | null>(null);
-  const [isLoadingVault, setIsLoadingVault] = React.useState(true);
-
-  // Fetch vault balance from on-chain object
-  React.useEffect(() => {
-    async function fetchVaultBalance() {
-      try {
-        const response = await suiClient.getObject({
-          id: pool.contracts.marginPoolId,
-          options: {
-            showBcs: true,
-          },
-        });
-
-        if (
-          response.data &&
-          response.data.bcs &&
-          response.data.bcs.dataType === "moveObject"
-        ) {
-          const marginPool = MarginPool.fromBase64(response.data.bcs.bcsBytes);
-          const vaultValue =
-            Number(marginPool.vault.value) / 10 ** pool.contracts.coinDecimals;
-          setVaultBalance(vaultValue);
-        }
-      } catch (error) {
-        console.error("Error fetching vault balance:", error);
-      } finally {
-        setIsLoadingVault(false);
-      }
-    }
-
-    fetchVaultBalance();
-    // Refresh every 15 seconds
-    const interval = setInterval(fetchVaultBalance, 15000);
-    return () => clearInterval(interval);
-  }, [pool.contracts.marginPoolId, pool.contracts.coinDecimals, suiClient]);
+export function LiquidityHealthCheck({ pool, vaultBalance: externalVaultBalance }: LiquidityHealthCheckProps) {
+  // Use centralized vault balance from parent (useVaultBalances hook)
+  const vaultBalance = externalVaultBalance ?? null;
+  const isLoadingVault = vaultBalance === null;
 
   // Calculate metrics
   const totalDeposits = pool.state.supply;

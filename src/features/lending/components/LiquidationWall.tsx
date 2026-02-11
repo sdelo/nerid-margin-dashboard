@@ -125,6 +125,10 @@ export function LiquidationWall({ poolId, asset = "" }: LiquidationWallProps) {
       (sum, liq) => sum + parseFloat(liq.pool_default) / 1e9,
       0
     );
+    const totalRewards = liquidations.reduce(
+      (sum, liq) => sum + parseFloat(liq.pool_reward) / 1e9,
+      0
+    );
     const avgLiquidationSize =
       totalLiquidations > 0 ? totalVolume / totalLiquidations : 0;
 
@@ -132,9 +136,66 @@ export function LiquidationWall({ poolId, asset = "" }: LiquidationWallProps) {
       totalLiquidations,
       totalVolume,
       totalBadDebt,
+      totalRewards,
       avgLiquidationSize,
     };
   }, [liquidations]);
+
+  // Liquidation Efficiency metrics
+  const efficiency = React.useMemo(() => {
+    if (liquidations.length === 0) return null;
+
+    // Coverage ratio: how much was covered vs total volume
+    const coveredVolume = stats.totalVolume - stats.totalBadDebt;
+    const coverageRatio = stats.totalVolume > 0
+      ? (coveredVolume / stats.totalVolume) * 100
+      : 100;
+
+    // Reward efficiency: rewards earned relative to volume
+    const rewardEfficiency = stats.totalVolume > 0
+      ? (stats.totalRewards / stats.totalVolume) * 100
+      : 0;
+
+    // Bad debt rate per liquidation
+    const badDebtRate = stats.totalLiquidations > 0
+      ? stats.totalBadDebt / stats.totalLiquidations
+      : 0;
+
+    // Liquidations with any bad debt
+    const liqsWithBadDebt = liquidations.filter(
+      (liq) => parseFloat(liq.pool_default) > 0
+    ).length;
+    const cleanLiquidationRate = stats.totalLiquidations > 0
+      ? ((stats.totalLiquidations - liqsWithBadDebt) / stats.totalLiquidations) * 100
+      : 100;
+
+    // Largest single liquidation
+    const largestLiq = Math.max(
+      ...liquidations.map((liq) => parseFloat(liq.liquidation_amount) / 1e9)
+    );
+
+    // Time clustering: check if liquidations cluster together
+    const timestamps = liquidations.map((l) => l.checkpoint_timestamp_ms).sort((a, b) => a - b);
+    let cascadeEvents = 0;
+    for (let i = 1; i < timestamps.length; i++) {
+      if (timestamps[i] - timestamps[i - 1] < 5 * 60 * 1000) { // within 5 minutes
+        cascadeEvents++;
+      }
+    }
+    const cascadeRate = timestamps.length > 1
+      ? (cascadeEvents / (timestamps.length - 1)) * 100
+      : 0;
+
+    return {
+      coverageRatio,
+      rewardEfficiency,
+      badDebtRate,
+      cleanLiquidationRate,
+      largestLiq,
+      liqsWithBadDebt,
+      cascadeRate,
+    };
+  }, [liquidations, stats]);
 
   return (
     <div className="space-y-6">
@@ -249,6 +310,63 @@ export function LiquidationWall({ poolId, asset = "" }: LiquidationWallProps) {
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* Liquidation Efficiency */}
+      {efficiency && (
+        <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+          <h3 className="text-lg font-bold text-cyan-200 mb-4">Liquidation Efficiency</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Coverage Ratio</div>
+              <div className={`text-lg font-bold font-mono ${
+                efficiency.coverageRatio >= 99 ? "text-emerald-400" :
+                efficiency.coverageRatio >= 95 ? "text-amber-400" : "text-red-400"
+              }`}>
+                {efficiency.coverageRatio.toFixed(1)}%
+              </div>
+              <div className="text-[10px] text-white/30 mt-1">Volume covered w/o bad debt</div>
+            </div>
+            <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Clean Liquidations</div>
+              <div className={`text-lg font-bold font-mono ${
+                efficiency.cleanLiquidationRate >= 90 ? "text-emerald-400" :
+                efficiency.cleanLiquidationRate >= 70 ? "text-amber-400" : "text-red-400"
+              }`}>
+                {efficiency.cleanLiquidationRate.toFixed(0)}%
+              </div>
+              <div className="text-[10px] text-white/30 mt-1">{stats.totalLiquidations - efficiency.liqsWithBadDebt}/{stats.totalLiquidations} zero bad debt</div>
+            </div>
+            <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Pool Rewards</div>
+              <div className="text-lg font-bold font-mono text-teal-400">
+                {stats.totalRewards.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[10px] text-white/30 mt-1">{asset} earned ({efficiency.rewardEfficiency.toFixed(1)}% of vol)</div>
+            </div>
+            <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Cascade Rate</div>
+              <div className={`text-lg font-bold font-mono ${
+                efficiency.cascadeRate > 30 ? "text-amber-400" : "text-white"
+              }`}>
+                {efficiency.cascadeRate.toFixed(0)}%
+              </div>
+              <div className="text-[10px] text-white/30 mt-1">Liqs within 5 min of each other</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-white/50 bg-white/[0.02] p-3 rounded-lg">
+            <span>📊</span>
+            <span>
+              {efficiency.coverageRatio >= 99
+                ? "Excellent — liquidation system is operating efficiently with minimal bad debt."
+                : efficiency.coverageRatio >= 95
+                  ? "Good — most liquidations are covered but some positions are occasionally underwater."
+                  : "Concerning — significant bad debt indicates positions aren't being liquidated early enough."
+              }
+              {efficiency.cascadeRate > 30 && " High cascade rate suggests correlated liquidation events."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Interpretation Guide */}
       <div className="bg-white/[0.02] border border-white/5 rounded-lg p-4 mt-4">

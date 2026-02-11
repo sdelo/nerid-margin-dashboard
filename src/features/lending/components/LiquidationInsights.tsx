@@ -99,33 +99,33 @@ function PoolBreakdownSection({
   const defaultColors = { bg: 'bg-white/[0.04]', border: 'border-white/[0.08]', text: 'text-white/70', bar: 'from-teal-500 to-teal-400' };
 
   return (
-    <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
-      <h3 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
-        <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-        </svg>
-        Liquidations by Pool
-      </h3>
+    <div className="surface-elevated p-6">
+      <h3 className="text-base font-semibold text-white mb-1">Liquidations by Pool</h3>
       <p className="text-xs text-white/40 mb-4">Which lending pools see the most liquidation activity</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid gap-4 ${
+        poolStats.length === 1 ? 'grid-cols-1 sm:max-w-md' :
+        poolStats.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+        poolStats.length === 3 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+        'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+      }`}>
         {poolStats.map((pool) => {
           const colors = poolColors[pool.asset] || defaultColors;
           const volumePct = (pool.volume / maxVolume) * 100;
           const badDebtPct = pool.volume > 0 ? (pool.badDebt / pool.volume) * 100 : 0;
 
           return (
-            <div key={pool.poolId} className={`rounded-lg border p-4 ${colors.bg} ${colors.border}`}>
+            <div key={pool.poolId} className={`rounded-xl border p-5 ${colors.bg} ${colors.border}`}>
               {/* Asset header */}
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-lg font-bold ${colors.text}`}>{pool.asset}</span>
-                <span className="text-xs text-white/40 bg-white/[0.06] px-2 py-0.5 rounded-full">
-                  {pool.count} liq{pool.count !== 1 ? 's' : ''}
+                <span className="text-xs text-white/50 bg-white/[0.08] px-2.5 py-1 rounded-full font-medium">
+                  {pool.count.toLocaleString()} liq{pool.count !== 1 ? 's' : ''}
                 </span>
               </div>
 
               {/* Volume bar */}
-              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-3">
+              <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-4">
                 <div
                   className={`h-full bg-gradient-to-r ${colors.bar} rounded-full transition-all duration-500`}
                   style={{ width: `${Math.max(volumePct, 3)}%` }}
@@ -133,23 +133,28 @@ function PoolBreakdownSection({
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-white/30">Volume</div>
-                  <div className="text-sm font-semibold text-white tabular-nums">{formatVolume(pool.volume)}</div>
+                  <div className="text-base font-bold text-white tabular-nums">{formatVolume(pool.volume)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-white/30">Avg Size</div>
-                  <div className="text-sm font-semibold text-white/80 tabular-nums">{formatVolume(pool.avgSize)}</div>
+                  <div className="text-base font-bold text-white/80 tabular-nums">{formatVolume(pool.avgSize)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-white/30">Rewards</div>
-                  <div className="text-sm font-semibold text-emerald-400 tabular-nums">{formatVolume(pool.rewards)}</div>
+                  <div className="text-base font-bold text-emerald-400 tabular-nums">{formatVolume(pool.rewards)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-white/30">Bad Debt</div>
-                  <div className={`text-sm font-semibold tabular-nums ${pool.badDebt > 0 ? 'text-rose-400' : 'text-white/30'}`}>
-                    {pool.badDebt > 0 ? `${formatVolume(pool.badDebt)} (${badDebtPct.toFixed(1)}%)` : '0'}
+                  <div className={`text-base font-bold tabular-nums ${pool.badDebt >= 0.01 ? 'text-rose-400' : 'text-white/30'}`}>
+                    {pool.badDebt >= 0.01
+                      ? `${formatVolume(pool.badDebt)} (${badDebtPct.toFixed(1)}%)`
+                      : pool.badDebt > 0
+                        ? `<0.01 (${badDebtPct.toFixed(1)}%)`
+                        : '0'
+                    }
                   </div>
                 </div>
               </div>
@@ -292,12 +297,16 @@ function RiskRatioDistribution({ liquidations }: { liquidations: LiquidationEven
 /**
  * Inline timeline chart for a single position's liquidation history.
  * Shows each event as a stem-and-dot (lollipop) on a time axis with size on the y-axis.
+ * Includes hover tooltips on each data point.
  */
 function PositionTimelineChart({
   events,
 }: {
   events: LiquidationEventResponse[];
 }) {
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
   const sorted = React.useMemo(
     () => [...events].sort((a, b) => a.checkpoint_timestamp_ms - b.checkpoint_timestamp_ms),
     [events],
@@ -324,12 +333,17 @@ function PositionTimelineChart({
   const y = (amt: number) => pt + innerH - (amt / maxAmt) * innerH;
 
   return (
-    <div className="mt-3 bg-white/[0.02] rounded-lg border border-white/[0.04] p-3">
+    <div ref={containerRef} className="mt-3 bg-white/[0.02] rounded-lg border border-white/[0.04] p-3 relative">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] uppercase tracking-wider text-white/30 font-medium">Liquidation History</span>
         <span className="text-[10px] text-white/30">{sorted.length} events</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        preserveAspectRatio="xMidYMid meet"
+        onMouseLeave={() => setHoveredIdx(null)}
+      >
         {/* Grid lines */}
         {[0, 0.5, 1].map((ratio) => (
           <line
@@ -344,40 +358,119 @@ function PositionTimelineChart({
           />
         ))}
 
+        {/* Hover crosshair line */}
+        {hoveredIdx !== null && (
+          <line
+            x1={x(sorted[hoveredIdx].checkpoint_timestamp_ms)}
+            y1={pt}
+            x2={x(sorted[hoveredIdx].checkpoint_timestamp_ms)}
+            y2={pt + innerH}
+            stroke="rgba(255,255,255,0.1)"
+            strokeDasharray="2 2"
+          />
+        )}
+
         {/* Lollipop stems + dots */}
         {sorted.map((evt, i) => {
           const amt = amounts[i];
           const cx = x(evt.checkpoint_timestamp_ms);
           const cy = y(amt);
           const hasBadDebt = parseFloat(evt.pool_default) > 0;
+          const isHovered = hoveredIdx === i;
+          const dotR = isHovered ? 6 : 4;
           return (
-            <g key={i}>
+            <g key={i} style={{ cursor: 'pointer' }}>
+              {/* Hit area (invisible, wider target) */}
+              <circle
+                cx={cx} cy={cy} r={12}
+                fill="transparent"
+                onMouseEnter={() => setHoveredIdx(i)}
+              />
               {/* Stem */}
               <line
                 x1={cx} y1={pt + innerH}
                 x2={cx} y2={cy}
                 stroke={hasBadDebt ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.15)'}
-                strokeWidth="1"
+                strokeWidth={isHovered ? 2 : 1}
+                style={{ transition: 'stroke-width 0.15s ease' }}
               />
+              {/* Glow on hover */}
+              {isHovered && (
+                <circle
+                  cx={cx} cy={cy} r={10}
+                  fill={hasBadDebt ? 'rgba(244,63,94,0.15)' : 'rgba(255,255,255,0.08)'}
+                />
+              )}
               {/* Dot */}
               <circle
-                cx={cx} cy={cy} r="4"
-                fill={hasBadDebt ? 'rgba(244,63,94,0.7)' : 'rgba(255,255,255,0.5)'}
-                stroke={hasBadDebt ? 'rgba(244,63,94,0.3)' : 'rgba(255,255,255,0.1)'}
+                cx={cx} cy={cy} r={dotR}
+                fill={hasBadDebt ? 'rgba(244,63,94,0.7)' : isHovered ? 'rgba(45,212,191,0.8)' : 'rgba(255,255,255,0.5)'}
+                stroke={hasBadDebt ? 'rgba(244,63,94,0.3)' : isHovered ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.1)'}
                 strokeWidth="1.5"
+                style={{ transition: 'r 0.15s ease, fill 0.15s ease' }}
               />
               {/* Value label on dot */}
               <text
-                x={cx} y={cy - 7}
+                x={cx} y={cy - (isHovered ? 10 : 7)}
                 textAnchor="middle"
                 className="fill-white/60 font-medium"
-                style={{ fontSize: '8px' }}
+                style={{ fontSize: isHovered ? '9px' : '8px', fontWeight: isHovered ? 600 : 500, transition: 'font-size 0.15s ease' }}
               >
                 {formatVolume(amt)}
               </text>
             </g>
           );
         })}
+
+        {/* Hover tooltip as foreignObject */}
+        {hoveredIdx !== null && (() => {
+          const evt = sorted[hoveredIdx];
+          const amt = amounts[hoveredIdx];
+          const reward = parseFloat(evt.pool_reward) / 1e9;
+          const debt = parseFloat(evt.pool_default) / 1e9;
+          const hasBadDebt = debt > 0;
+          const cx = x(evt.checkpoint_timestamp_ms);
+          // Position tooltip to avoid overflow
+          const tooltipW = 140;
+          const tooltipH = hasBadDebt ? 70 : 56;
+          const tooltipX = Math.max(pl, Math.min(cx - tooltipW / 2, width - pr - tooltipW));
+          const tooltipY = Math.max(0, y(amt) - tooltipH - 14);
+
+          return (
+            <foreignObject x={tooltipX} y={tooltipY} width={tooltipW} height={tooltipH} style={{ pointerEvents: 'none' }}>
+              <div
+                style={{
+                  background: 'rgba(10, 20, 25, 0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  padding: '6px 8px',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}
+              >
+                <div style={{ fontSize: '8px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px', fontWeight: 500 }}>
+                  {new Date(evt.checkpoint_timestamp_ms).toLocaleString([], {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#fff', fontWeight: 600 }}>
+                  <span>Amount</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{amt >= 0.01 ? amt.toFixed(2) : '<0.01'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#10b981', marginTop: '2px' }}>
+                  <span>Reward</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{reward >= 0.01 ? reward.toFixed(2) : '<0.01'}</span>
+                </div>
+                {hasBadDebt && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#f87171', marginTop: '2px' }}>
+                    <span>Bad Debt</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{debt >= 0.01 ? debt.toFixed(2) : '<0.01'}</span>
+                  </div>
+                )}
+              </div>
+            </foreignObject>
+          );
+        })()}
 
         {/* Y-axis labels */}
         <text x={pl - 4} y={pt + 4} textAnchor="end" className="fill-white/30" style={{ fontSize: '8px' }}>
@@ -394,8 +487,8 @@ function PositionTimelineChart({
             x={x(evt.checkpoint_timestamp_ms)}
             y={pt + innerH + 14}
             textAnchor="middle"
-            className="fill-white/30"
-            style={{ fontSize: '8px' }}
+            className={hoveredIdx === i ? 'fill-white/70' : 'fill-white/30'}
+            style={{ fontSize: '8px', fontWeight: hoveredIdx === i ? 600 : 400, transition: 'fill 0.15s ease' }}
           >
             {new Date(evt.checkpoint_timestamp_ms).toLocaleDateString([], { month: 'short', day: 'numeric' })}
           </text>
@@ -409,9 +502,18 @@ function PositionTimelineChart({
           const reward = parseFloat(evt.pool_reward) / 1e9;
           const debt = parseFloat(evt.pool_default) / 1e9;
           const hasBadDebt = debt > 0;
+          const isHighlighted = hoveredIdx === i;
           return (
-            <div key={i} className="flex items-center gap-3 text-[11px] text-white/50">
-              <span className="text-white/30 tabular-nums w-28 shrink-0">
+            <div
+              key={i}
+              className={`flex items-center gap-3 text-[11px] transition-colors rounded px-1 -mx-1 ${
+                isHighlighted ? 'bg-white/[0.04] text-white/70' : 'text-white/50'
+              }`}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              style={{ cursor: 'default' }}
+            >
+              <span className={`tabular-nums w-28 shrink-0 ${isHighlighted ? 'text-white/50' : 'text-white/30'}`}>
                 {new Date(evt.checkpoint_timestamp_ms).toLocaleString([], {
                   month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                 })}
@@ -704,132 +806,7 @@ function SizeDistribution({ liquidations }: { liquidations: LiquidationEventResp
   );
 }
 
-// ─── 5. Cumulative Volume Over Time ───────────────────────────────────────────
-
-function CumulativeVolumeChart({ liquidations }: { liquidations: LiquidationEventResponse[] }) {
-  const chartData = React.useMemo(() => {
-    const sorted = [...liquidations].sort((a, b) => a.checkpoint_timestamp_ms - b.checkpoint_timestamp_ms);
-
-    let cumulative = 0;
-    const points: { timestamp: number; cumulative: number; date: string }[] = [];
-
-    sorted.forEach((liq) => {
-      cumulative += parseFloat(liq.liquidation_amount) / 1e9;
-      const date = new Date(liq.checkpoint_timestamp_ms).toISOString().split('T')[0];
-      // Deduplicate by day - keep the last point for each day
-      if (points.length > 0 && points[points.length - 1].date === date) {
-        points[points.length - 1].cumulative = cumulative;
-      } else {
-        points.push({ timestamp: liq.checkpoint_timestamp_ms, cumulative, date });
-      }
-    });
-
-    return points;
-  }, [liquidations]);
-
-  if (chartData.length < 2) return null;
-
-  const chartHeight = 100;
-  const paddingLeft = 45;
-  const paddingRight = 10;
-  const paddingTop = 10;
-  const paddingBottom = 25;
-  const width = 600;
-  const innerWidth = width - paddingLeft - paddingRight;
-  const innerHeight = chartHeight - paddingTop - paddingBottom;
-
-  const maxCumulative = chartData[chartData.length - 1].cumulative;
-  const minTime = chartData[0].timestamp;
-  const maxTime = chartData[chartData.length - 1].timestamp;
-  const timeRange = maxTime - minTime || 1;
-
-  const xScale = (ts: number) => paddingLeft + ((ts - minTime) / timeRange) * innerWidth;
-  const yScale = (val: number) => paddingTop + innerHeight - (val / maxCumulative) * innerHeight;
-
-  const linePath = chartData
-    .map((d, idx) => `${idx === 0 ? 'M' : 'L'} ${xScale(d.timestamp)} ${yScale(d.cumulative)}`)
-    .join(' ');
-
-  const areaPath = `${linePath} L ${xScale(maxTime)} ${paddingTop + innerHeight} L ${xScale(minTime)} ${paddingTop + innerHeight} Z`;
-
-  return (
-    <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <svg className="w-4 h-4 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-            Cumulative Liquidation Volume
-          </h3>
-          <p className="text-xs text-white/40 mt-0.5">Total risk processed by the protocol over time</p>
-        </div>
-        <div className="text-right px-3 py-2 bg-white/[0.04] rounded-lg border border-white/[0.06]">
-          <div className="text-white font-bold text-sm tabular-nums">{formatVolume(maxCumulative)}</div>
-          <div className="text-white/40 text-[10px]">total volume</div>
-        </div>
-      </div>
-
-      <div className="relative bg-white/[0.02] rounded-lg p-2 border border-white/[0.04]">
-        <svg viewBox={`0 0 ${width} ${chartHeight}`} className="w-full" preserveAspectRatio="xMidYMid meet">
-          {/* Grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-            <line
-              key={ratio}
-              x1={paddingLeft}
-              y1={paddingTop + innerHeight * (1 - ratio)}
-              x2={paddingLeft + innerWidth}
-              y2={paddingTop + innerHeight * (1 - ratio)}
-              stroke="white"
-              strokeOpacity="0.04"
-              strokeDasharray="4 4"
-            />
-          ))}
-
-          {/* Area fill */}
-          <path d={areaPath} fill="url(#cumulativeGradient)" />
-
-          {/* Main line — subtle, no glow */}
-          <path d={linePath} fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* End dot */}
-          <circle cx={xScale(maxTime)} cy={yScale(maxCumulative)} r="3" fill="rgba(255,255,255,0.6)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
-
-          {/* Y-axis labels */}
-          <text x={paddingLeft - 5} y={paddingTop + 4} textAnchor="end" className="fill-white/40 text-[9px] font-medium">
-            {formatVolume(maxCumulative)}
-          </text>
-          <text x={paddingLeft - 5} y={paddingTop + innerHeight} textAnchor="end" className="fill-white/40 text-[9px] font-medium">
-            0
-          </text>
-
-          {/* X-axis labels */}
-          {chartData.filter((_, idx) => idx === 0 || idx === chartData.length - 1 || idx === Math.floor(chartData.length / 2)).map((d) => (
-            <text
-              key={d.date}
-              x={xScale(d.timestamp)}
-              y={paddingTop + innerHeight + 15}
-              textAnchor="middle"
-              className="fill-white/40 text-[9px] font-medium"
-            >
-              {new Date(d.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-            </text>
-          ))}
-
-          {/* Gradient definition */}
-          <defs>
-            <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
-              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-// ─── 6. Time-of-Day Heatmap ──────────────────────────────────────────────────
+// ─── 5. Time-of-Day Heatmap ──────────────────────────────────────────────────
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const HOUR_LABELS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p'];
@@ -971,9 +948,6 @@ export function LiquidationInsights({ liquidations, isLoading }: LiquidationInsi
     <div className="space-y-4">
       {/* Pool Breakdown Cards */}
       <PoolBreakdownSection liquidations={liquidations} poolIdToAsset={poolIdToAsset} />
-
-      {/* Cumulative Volume Chart */}
-      <CumulativeVolumeChart liquidations={liquidations} />
 
       {/* Two-column: Risk Ratio Distribution + Size Distribution */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

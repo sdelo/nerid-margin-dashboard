@@ -48,8 +48,14 @@ export interface QueryParams {
 export type TimeRange = '1W' | '1M' | '3M' | 'YTD' | 'ALL';
 
 /**
+ * Earliest allowed chart date: Jan 17, 2026 00:00:00 UTC (in seconds)
+ */
+export const MIN_CHART_START_TIME = Math.floor(new Date('2026-01-17T00:00:00Z').getTime() / 1000);
+
+/**
  * Helper to convert TimeRange to start/end timestamps
  * Returns timestamps in SECONDS (as expected by the server)
+ * start_time is clamped so charts never look back before MIN_CHART_START_TIME.
  */
 export function timeRangeToParams(range: TimeRange): { start_time: number; end_time: number } {
   const now = Date.now();
@@ -71,9 +77,12 @@ export function timeRangeToParams(range: TimeRange): { start_time: number; end_t
       start_time = Math.floor(yearStart.getTime() / 1000);
       break;
     case 'ALL':
-      start_time = 0; // Beginning of time
+      start_time = MIN_CHART_START_TIME;
       break;
   }
+
+  // Never look back before Jan 17, 2026
+  start_time = Math.max(start_time, MIN_CHART_START_TIME);
 
   return { start_time, end_time };
 }
@@ -85,7 +94,7 @@ export function timeRangeToParams(range: TimeRange): { start_time: number; end_t
 export function getDefaultTimeRange(): { start_time: number; end_time: number } {
   const now = Date.now();
   const end_time = Math.floor(now / 1000); // Current time in seconds
-  const start_time = 1 // begining of history
+  const start_time = MIN_CHART_START_TIME; // Never before Jan 17, 2026
   return { start_time, end_time };
 }
 

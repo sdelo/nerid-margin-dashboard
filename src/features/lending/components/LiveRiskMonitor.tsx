@@ -8,6 +8,7 @@ interface LiveRiskMonitorProps {
   positions: AtRiskPosition[];
   isLoading: boolean;
   onLiquidate: (position: AtRiskPosition) => void;
+  onOpenWallet?: (position: AtRiskPosition) => void;
   lastUpdated: Date | null;
 }
 
@@ -146,6 +147,7 @@ export function LiveRiskMonitor({
   positions,
   isLoading,
   onLiquidate,
+  onOpenWallet,
   lastUpdated,
 }: LiveRiskMonitorProps) {
   const { isActive, shockAsset, shockPct, range, resetScenario } = useScenario();
@@ -740,6 +742,26 @@ export function LiveRiskMonitor({
                             </div>
                           </div>
                           
+                          {/* Wallet link */}
+                          <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center justify-between">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenWallet?.(position);
+                              }}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-400 hover:text-teal-300 transition-colors"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              View Wallet Detail →
+                            </button>
+                            <span className="text-[9px] text-white/20">
+                              Updated {position.updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
                           {/* Scenario impact details */}
                           {scenario && (
                             <div className="mt-4 pt-4 border-t border-white/[0.06]">

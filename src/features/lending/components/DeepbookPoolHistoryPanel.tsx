@@ -49,9 +49,11 @@ export const DeepbookPoolHistoryPanel: FC<Props> = ({ poolId, onClose }) => {
         setIsLoading(true);
         setError(null);
 
+        // Use start_time: 0 to include events that predate MIN_CHART_START_TIME
+        const allTimeParams = { pool_id: poolId, start_time: 0 };
         const [registeredEvents, configUpdatedEvents] = await Promise.all([
-          fetchDeepbookPoolRegistered({ pool_id: poolId }),
-          fetchDeepbookPoolConfigUpdated({ pool_id: poolId }),
+          fetchDeepbookPoolRegistered(allTimeParams),
+          fetchDeepbookPoolConfigUpdated(allTimeParams),
         ]);
 
         const allEvents: PoolConfigEvent[] = [

@@ -2,41 +2,92 @@ import React from "react";
 import { OverviewTiles } from "./OverviewTiles";
 
 // Yield sub-components
-import { YieldCurve } from "./YieldCurve";
-import { APYHistory } from "./APYHistory";
+import { APYPanel } from "./APYPanel";
+import { PoolRevenue } from "./PoolRevenue";
+import { SharePriceHistory } from "./SharePriceHistory";
 import { BackedMarketsTab } from "./BackedMarketsTab";
 
 // Risk sub-components
 import { PoolRiskOutlook } from "./PoolRiskOutlook";
+import { HealthFactorTrend } from "./HealthFactorTrend";
 import { LiquidityTab } from "./LiquidityTab";
-import { WhaleWatch } from "./WhaleWatch";
+import { ConcentrationAnalysis } from "./ConcentrationAnalysis";
 import { LiquidationWall } from "./LiquidationWall";
+import { CompositeRiskScore } from "./CompositeRiskScore";
 
 // Activity sub-components
 import { PoolActivity } from "./PoolActivity";
 import { BorrowRepayActivity } from "./BorrowRepayActivity";
 import { UnifiedEventFeed } from "./UnifiedEventFeed";
-import { WhaleComposition } from "./WhaleComposition";
+import { UserGrowthChart } from "./UserGrowthChart";
 import { ReferralActivity } from "./ReferralActivity";
 
+import { PoolComparisonChart } from "./PoolComparisonChart";
 import type { PoolOverview } from "../types";
 import { useStickyHeader } from "../../../context/StickyHeaderContext";
 import type { SectionGroup } from "../../../components/SectionChips";
+
+/**
+ * Renders PoolComparisonChart only once the section scrolls into view.
+ * Prevents 16 indexer calls from firing on initial page load.
+ */
+function LazyPoolComparison({
+  pools,
+  currentPool,
+  containerRef,
+}: {
+  pools: PoolOverview[];
+  currentPool: PoolOverview;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // Only need to trigger once
+        }
+      },
+      { rootMargin: "200px" }, // Start loading 200px before it's visible
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [containerRef]);
+
+  if (!isVisible) {
+    return (
+      <div className="h-[400px] flex items-center justify-center">
+        <span className="text-xs text-white/30">Scroll down to load comparison chart</span>
+      </div>
+    );
+  }
+
+  return <PoolComparisonChart pools={pools} currentPool={currentPool} />;
+}
 
 // ── Canonical section config (exported so PoolsPage can render chips) ───
 export const ANALYTICS_SECTIONS: SectionGroup[] = [
   {
     id: "health",
     label: "Overview",
-    items: [{ id: "health", label: "Overview" }],
+    items: [
+      { id: "health", label: "Overview" },
+    ],
   },
   {
     id: "yield",
     label: "Yield",
     items: [
-      { id: "rates", label: "Rate Model" },
-      { id: "apy-history", label: "APY" },
+      { id: "apy", label: "APY" },
+      { id: "revenue", label: "Revenue" },
+      { id: "share-price", label: "Share Price" },
       { id: "markets", label: "Markets" },
+      { id: "comparison", label: "Compare" },
     ],
   },
   {
@@ -44,6 +95,8 @@ export const ANALYTICS_SECTIONS: SectionGroup[] = [
     label: "Risk",
     items: [
       { id: "risk-overview", label: "Risk" },
+      { id: "hf-trend", label: "HF Trend" },
+      { id: "risk-score", label: "Score" },
       { id: "liquidity", label: "Liquidity" },
       { id: "concentration", label: "Whales" },
       { id: "liquidations", label: "Liquidations" },
@@ -56,7 +109,7 @@ export const ANALYTICS_SECTIONS: SectionGroup[] = [
       { id: "supply-withdraw", label: "Supply" },
       { id: "borrow-repay", label: "Borrow" },
       { id: "event-feed", label: "Events" },
-      { id: "composition", label: "Composition" },
+      { id: "user-growth", label: "Users" },
       { id: "referrals", label: "Referrals" },
     ],
   },
@@ -106,36 +159,45 @@ export function PoolAnalytics({
 
   // ── Section refs ───────────────────────────────────────────────────────
   const healthRef = React.useRef<HTMLDivElement>(null);
-  const ratesRef = React.useRef<HTMLDivElement>(null);
-  const apyHistoryRef = React.useRef<HTMLDivElement>(null);
+  const comparisonRef = React.useRef<HTMLDivElement>(null);
+  const apyRef = React.useRef<HTMLDivElement>(null);
+  const revenueRef = React.useRef<HTMLDivElement>(null);
+  const sharePriceRef = React.useRef<HTMLDivElement>(null);
   const marketsRef = React.useRef<HTMLDivElement>(null);
   const riskOverviewRef = React.useRef<HTMLDivElement>(null);
+  const hfTrendRef = React.useRef<HTMLDivElement>(null);
+  const riskScoreRef = React.useRef<HTMLDivElement>(null);
   const liquidityRef = React.useRef<HTMLDivElement>(null);
   const concentrationRef = React.useRef<HTMLDivElement>(null);
   const liquidationsRef = React.useRef<HTMLDivElement>(null);
   const supplyWithdrawRef = React.useRef<HTMLDivElement>(null);
   const borrowRepayRef = React.useRef<HTMLDivElement>(null);
   const eventFeedRef = React.useRef<HTMLDivElement>(null);
-  const compositionRef = React.useRef<HTMLDivElement>(null);
+  const userGrowthRef = React.useRef<HTMLDivElement>(null);
   const referralsRef = React.useRef<HTMLDivElement>(null);
 
   const allRefs: Record<string, React.RefObject<HTMLDivElement | null>> = React.useMemo(
     () => ({
       health: healthRef,
-      rates: ratesRef,
-      rateModel: ratesRef, // alias
-      "apy-history": apyHistoryRef,
-      apy: apyHistoryRef,
-      history: apyHistoryRef,
+      comparison: comparisonRef,
+      apy: apyRef,
+      rates: apyRef, // alias — old "Rate Model" section
+      rateModel: apyRef, // alias
+      "apy-history": apyRef, // alias
+      history: apyRef, // alias
+      revenue: revenueRef,
+      "share-price": sharePriceRef,
       markets: marketsRef,
       "risk-overview": riskOverviewRef,
+      "hf-trend": hfTrendRef,
+      "risk-score": riskScoreRef,
       liquidity: liquidityRef,
       concentration: concentrationRef,
       liquidations: liquidationsRef,
       "supply-withdraw": supplyWithdrawRef,
       "borrow-repay": borrowRepayRef,
       "event-feed": eventFeedRef,
-      composition: compositionRef,
+      "user-growth": userGrowthRef,
       referrals: referralsRef,
     }),
     [],
@@ -200,17 +262,21 @@ export function PoolAnalytics({
     // Only observe the canonical IDs (not aliases)
     const canonicalRefs: Record<string, React.RefObject<HTMLDivElement | null>> = {
       health: healthRef,
-      rates: ratesRef,
-      "apy-history": apyHistoryRef,
+      comparison: comparisonRef,
+      apy: apyRef,
+      revenue: revenueRef,
+      "share-price": sharePriceRef,
       markets: marketsRef,
       "risk-overview": riskOverviewRef,
+      "hf-trend": hfTrendRef,
+      "risk-score": riskScoreRef,
       liquidity: liquidityRef,
       concentration: concentrationRef,
       liquidations: liquidationsRef,
       "supply-withdraw": supplyWithdrawRef,
       "borrow-repay": borrowRepayRef,
       "event-feed": eventFeedRef,
-      composition: compositionRef,
+      "user-growth": userGrowthRef,
       referrals: referralsRef,
     };
 
@@ -271,16 +337,24 @@ export function PoolAnalytics({
         </div>
 
         <div className="space-y-8">
-          <div ref={ratesRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("rates")}`}>
-            <YieldCurve pool={pool} />
+          <div ref={apyRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("apy")}`}>
+            <APYPanel pool={pool} />
           </div>
           <div className="border-t border-white/[0.04]" />
-          <div ref={apyHistoryRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("apy-history")}`}>
-            <APYHistory pool={pool} />
+          <div ref={revenueRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("revenue")}`}>
+            <PoolRevenue pool={pool} />
+          </div>
+          <div className="border-t border-white/[0.04]" />
+          <div ref={sharePriceRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("share-price")}`}>
+            <SharePriceHistory pool={pool} />
           </div>
           <div className="border-t border-white/[0.04]" />
           <div ref={marketsRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("markets")}`}>
             <BackedMarketsTab pool={pool} pools={pools} onMarketClick={onMarketClick || (() => {})} />
+          </div>
+          <div className="border-t border-white/[0.04]" />
+          <div ref={comparisonRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("comparison")}`}>
+            <LazyPoolComparison pools={pools} currentPool={pool} containerRef={comparisonRef} />
           </div>
         </div>
       </section>
@@ -333,16 +407,20 @@ export function PoolAnalytics({
             <PoolRiskOutlook pool={pool} />
           </div>
           <div className="border-t border-white/[0.04]" />
+          <div ref={hfTrendRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("hf-trend")}`}>
+            <HealthFactorTrend pool={pool} />
+          </div>
+          <div className="border-t border-white/[0.04]" />
+          <div ref={riskScoreRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("risk-score")}`}>
+            <CompositeRiskScore pool={pool} />
+          </div>
+          <div className="border-t border-white/[0.04]" />
           <div ref={liquidityRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("liquidity")}`}>
             <LiquidityTab pool={pool} />
           </div>
           <div className="border-t border-white/[0.04]" />
           <div ref={concentrationRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("concentration")}`}>
-            <WhaleWatch
-              poolId={pool.contracts?.marginPoolId}
-              decimals={pool.contracts?.coinDecimals ?? 9}
-              asset={pool.asset}
-            />
+            <ConcentrationAnalysis pool={pool} />
           </div>
           <div className="border-t border-white/[0.04]" />
           <div ref={liquidationsRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("liquidations")}`}>
@@ -371,37 +449,6 @@ export function PoolAnalytics({
           </div>
         </div>
 
-        {/* Quick summary strip */}
-        <div className="flex items-center gap-4 p-3 mb-6 bg-gradient-to-r from-slate-800/60 to-transparent rounded-xl border border-slate-700/30">
-          <div className="flex-1 flex items-center gap-6 flex-wrap">
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">TVL</span>
-              <div className="text-lg font-bold text-cyan-400 font-mono">
-                {fmtNum(pool.state.supply)}
-                <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
-              </div>
-            </div>
-            <div className="w-px h-8 bg-slate-700/50" />
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Borrowed</span>
-              <div className="text-lg font-bold text-amber-400 font-mono">
-                {fmtNum(pool.state.borrow)}
-                <span className="text-xs text-slate-500 ml-1">{pool.asset}</span>
-              </div>
-            </div>
-            <div className="w-px h-8 bg-slate-700/50" />
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Utilization</span>
-              <div className={`text-lg font-bold font-mono ${utilColor}`}>{utilization.toFixed(1)}%</div>
-            </div>
-            <div className="w-px h-8 bg-slate-700/50" />
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Available</span>
-              <div className="text-lg font-bold text-white font-mono">{fmtNum(availableLiquidity)}</div>
-            </div>
-          </div>
-        </div>
-
         <div className="space-y-8">
           <div ref={supplyWithdrawRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("supply-withdraw")}`}>
             <PoolActivity pool={pool} />
@@ -415,8 +462,8 @@ export function PoolAnalytics({
             <UnifiedEventFeed pool={pool} />
           </div>
           <div className="border-t border-slate-700/30" />
-          <div ref={compositionRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("composition")}`}>
-            <WhaleComposition pool={pool} />
+          <div ref={userGrowthRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("user-growth")}`}>
+            <UserGrowthChart pool={pool} />
           </div>
           <div className="border-t border-slate-700/30" />
           <div ref={referralsRef} className={`scroll-mt-sticky rounded-xl p-1 transition-all duration-300 ${flash("referrals")}`}>

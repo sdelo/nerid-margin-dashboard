@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSuiClient } from '@mysten/dapp-kit';
-import { fetchUserCurrentSupply } from '../api/onChainReads';
+import { fetchMultipleUserCurrentSupply, type PositionDescriptor } from '../api/onChainReads';
 import { fetchUserOriginalValue } from '../api/userHistory';
 import { getContracts } from '../config/contracts';
 import { useAppNetwork } from '../context/AppNetworkContext';
@@ -32,6 +32,10 @@ const MAX_RETRY_DELAY_MS = 5000; // 5 seconds max
 
 /**
  * Hook to enrich user positions with live on-chain data and event-based cost basis.
+ * 
+ * Optimised: all positions' `user_supply_amount` calls are batched into a SINGLE
+ * `devInspectTransactionBlock` RPC call (via fetchMultipleUserCurrentSupply).
+ * Indexer original-value lookups are fetched in parallel via Promise.all.
  * Includes auto-retry polling when indexer data is not yet available.
  */
 export function useEnrichedUserPositions(
@@ -42,160 +46,142 @@ export function useEnrichedUserPositions(
   const { network } = useAppNetwork();
   const [enrichedData, setEnrichedData] = React.useState<Map<string, EnrichedDataEntry>>(new Map());
   
-  // Use ref to track in-flight requests to avoid duplicate fetching
-  const inFlightRef = React.useRef<Set<string>>(new Set());
+  // Use ref to track whether a batch fetch is already in-flight
+  const inFlightRef = React.useRef(false);
   
   // Use ref to access current enrichedData without adding it to dependencies
   const enrichedDataRef = React.useRef(enrichedData);
   enrichedDataRef.current = enrichedData;
   
   // Track retry timeouts so we can clear them on unmount
-  const retryTimeoutsRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const retryTimeoutsRef = React.useRef<NodeJS.Timeout | null>(null);
 
   React.useEffect(() => {
     if (positions.length === 0 || pools.length === 0) {
       return;
     }
 
-    // Process each position
+    // Determine which positions actually need fetching
+    const positionsToFetch: { position: UserPosition; pool: PoolOverview; key: string }[] = [];
     for (const position of positions) {
       const key = `${position.supplierCapId}-${position.asset}`;
-      
-      // Skip if already in flight
-      if (inFlightRef.current.has(key)) {
-        continue;
-      }
-
-      // Skip if already successfully loaded AND shares haven't changed
       const existingData = enrichedDataRef.current.get(key);
+      // Skip if already successfully loaded AND shares haven't changed
       if (existingData && !existingData.isLoading && existingData.currentValue !== null && existingData.originalValue !== null && !existingData.error) {
-        // Check if shares changed (deposit/withdraw happened)
-        if (existingData.shares === position.shares) {
-          continue;
-        }
+        if (existingData.shares === position.shares) continue;
       }
-
-      // Find the pool for this position
       const pool = pools.find(p => p.asset === position.asset);
-      if (!pool) {
-        continue;
-      }
-
-      // Mark as in-flight
-      inFlightRef.current.add(key);
-
-      // Async IIFE to handle each position with retry logic
-      (async () => {
-        const fetchWithRetry = async (retryCount: number = 0) => {
-          try {
-            const contracts = getContracts(network);
-            const packageId = contracts.MARGIN_PACKAGE_ID;
-
-            // Fetch current value from chain
-            const currentValue = await fetchUserCurrentSupply(
-              suiClient,
-              pool.contracts.marginPoolId,
-              position.supplierCapId,
-              pool.contracts.marginPoolType,
-              packageId
-            );
-
-            // Calculate original value from events
-            // Ensure shares is converted to BigInt properly (handles string or number)
-            const sharesAsBigInt = typeof position.shares === 'bigint' 
-              ? position.shares 
-              : BigInt(Math.floor(Number(position.shares)));
-              
-            const originalValue = await fetchUserOriginalValue(
-              position.supplierCapId,
-              pool.contracts.marginPoolId,
-              sharesAsBigInt
-            );
-
-            // Ensure all values are BigInt (convert if needed)
-            const currentBigInt = currentValue !== null ? BigInt(currentValue) : null;
-            const originalBigInt = originalValue !== null ? BigInt(originalValue) : null;
-            
-            // If originalValue is null but we have currentValue, and we haven't exceeded retries, schedule a retry
-            if (currentBigInt !== null && originalBigInt === null && retryCount < MAX_RETRY_COUNT) {
-              
-              // Update state to show loading state (but with current value available)
-              setEnrichedData(prev => {
-                const next = new Map(prev);
-                next.set(key, {
-                  currentValue: currentBigInt,
-                  originalValue: null,
-                  isLoading: true, // Keep loading state during retries
-                  error: null,
-                  shares: position.shares,
-                  retryCount: retryCount + 1,
-                  lastRetryTime: Date.now(),
-                });
-                return next;
-              });
-              
-              // Clear any existing timeout for this key
-              const existingTimeout = retryTimeoutsRef.current.get(key);
-              if (existingTimeout) {
-                clearTimeout(existingTimeout);
-              }
-              
-              // Schedule retry with exponential backoff (capped at MAX_RETRY_DELAY_MS)
-              const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(1.5, retryCount), MAX_RETRY_DELAY_MS);
-              const timeoutId = setTimeout(() => {
-                retryTimeoutsRef.current.delete(key);
-                fetchWithRetry(retryCount + 1);
-              }, delay);
-              retryTimeoutsRef.current.set(key, timeoutId);
-              
-              return; // Don't update state again, we'll do it in the retry
-            }
-            
-            // Update state with final result
-            setEnrichedData(prev => {
-              const next = new Map(prev);
-              next.set(key, {
-                currentValue: currentBigInt,
-                originalValue: originalBigInt,
-                isLoading: false,
-                error: null,
-                shares: position.shares,
-                retryCount: retryCount,
-                lastRetryTime: Date.now(),
-              });
-              return next;
-            });
-          } catch (error) {
-            
-            setEnrichedData(prev => {
-              const next = new Map(prev);
-              next.set(key, {
-                currentValue: null,
-                originalValue: null,
-                isLoading: false,
-                error: error instanceof Error ? error : new Error(String(error)),
-                shares: position.shares,
-                retryCount: retryCount,
-                lastRetryTime: Date.now(),
-              });
-              return next;
-            });
-          } finally {
-            // Only remove from in-flight if we're not retrying
-            if (retryCount === 0 || retryCount >= MAX_RETRY_COUNT) {
-              inFlightRef.current.delete(key);
-            }
-          }
-        };
-        
-        await fetchWithRetry(0);
-      })();
+      if (!pool) continue;
+      positionsToFetch.push({ position, pool, key });
     }
+
+    if (positionsToFetch.length === 0 || inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    const fetchBatch = async (retryCount: number = 0) => {
+      try {
+        const contracts = getContracts(network);
+        const packageId = contracts.MARGIN_PACKAGE_ID;
+
+        // ── 1. Batch ALL on-chain supply lookups into ONE RPC call ──
+        const descriptors: PositionDescriptor[] = positionsToFetch.map(({ position, pool }) => ({
+          poolId: pool.contracts.marginPoolId,
+          supplierCapId: position.supplierCapId,
+          assetType: pool.contracts.marginPoolType,
+        }));
+
+        const _t0 = performance.now();
+        const currentValues = await fetchMultipleUserCurrentSupply(suiClient, descriptors, packageId);
+        console.log(`⏱ [enrichedPositions] batched devInspect RPC: ${(performance.now() - _t0).toFixed(1)}ms`);
+
+        // ── 2. Fetch original values from indexer (per-position, all in parallel) ──
+        // Each fetchUserOriginalValue now runs supply + withdrawal in parallel
+        // internally (Promise.all), and all positions run concurrently too.
+        const _t1 = performance.now();
+        const originalValueResults = await Promise.all(
+          positionsToFetch.map(async ({ position, pool }) => {
+            const sharesAsBigInt = typeof position.shares === 'bigint'
+              ? position.shares
+              : BigInt(Math.floor(Number(position.shares)));
+            try {
+              return await fetchUserOriginalValue(
+                position.supplierCapId,
+                pool.contracts.marginPoolId,
+                sharesAsBigInt
+              );
+            } catch {
+              return null;
+            }
+          })
+        );
+        console.log(`⏱ [enrichedPositions] original values from indexer: ${(performance.now() - _t1).toFixed(1)}ms`);
+
+        // ── 3. Check if any positions need indexer retries ──
+        let needsRetry = false;
+
+        setEnrichedData(prev => {
+          const next = new Map(prev);
+          positionsToFetch.forEach(({ position, key }, idx) => {
+            const currentBigInt = currentValues.get(position.supplierCapId) ?? null;
+            const rawOriginal = originalValueResults[idx];
+            const originalBigInt = rawOriginal !== null ? BigInt(rawOriginal) : null;
+
+            if (currentBigInt !== null && originalBigInt === null && retryCount < MAX_RETRY_COUNT) {
+              needsRetry = true;
+            }
+
+            const isStillLoading = currentBigInt !== null && originalBigInt === null && retryCount < MAX_RETRY_COUNT;
+
+            next.set(key, {
+              currentValue: currentBigInt,
+              originalValue: originalBigInt,
+              isLoading: isStillLoading,
+              error: null,
+              shares: position.shares,
+              retryCount: retryCount,
+              lastRetryTime: Date.now(),
+            });
+          });
+          return next;
+        });
+
+        if (needsRetry) {
+          const delay = Math.min(INITIAL_RETRY_DELAY_MS * Math.pow(1.5, retryCount), MAX_RETRY_DELAY_MS);
+          retryTimeoutsRef.current = setTimeout(() => {
+            fetchBatch(retryCount + 1);
+          }, delay);
+        } else {
+          inFlightRef.current = false;
+        }
+      } catch (error) {
+        setEnrichedData(prev => {
+          const next = new Map(prev);
+          positionsToFetch.forEach(({ position, key }) => {
+            next.set(key, {
+              currentValue: null,
+              originalValue: null,
+              isLoading: false,
+              error: error instanceof Error ? error : new Error(String(error)),
+              shares: position.shares,
+              retryCount,
+              lastRetryTime: Date.now(),
+            });
+          });
+          return next;
+        });
+        inFlightRef.current = false;
+      }
+    };
+
+    fetchBatch(0);
     
     // Cleanup function to clear retry timeouts on unmount
     return () => {
-      retryTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      retryTimeoutsRef.current.clear();
+      if (retryTimeoutsRef.current) {
+        clearTimeout(retryTimeoutsRef.current);
+        retryTimeoutsRef.current = null;
+      }
+      inFlightRef.current = false;
     };
   }, [positions, pools, suiClient, network]);
 
@@ -211,7 +197,7 @@ export function useEnrichedUserPositions(
         currentValueFromChain: null,
         originalValueFromEvents: null,
         interestEarned: null,
-        isLoading: inFlightRef.current.has(key),
+        isLoading: inFlightRef.current,
         isIndexerPending: false,
         error: null,
       };

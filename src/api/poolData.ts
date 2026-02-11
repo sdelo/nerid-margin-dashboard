@@ -88,6 +88,7 @@ export async function fetchMarginPoolsBatched(
 
   try {
     // Use multiGetObjects to fetch all pools in a single RPC call
+    const _t0 = performance.now();
     const responses = await suiClient.multiGetObjects({
       ids: poolIds,
       options: {
@@ -95,6 +96,7 @@ export async function fetchMarginPoolsBatched(
         showType: true,
       },
     });
+    console.log(`⏱ [poolData] multiGetObjects RPC: ${(performance.now() - _t0).toFixed(1)}ms`);
 
     // Parse all responses
     const pools = responses.map((response, index) => 
@@ -103,7 +105,9 @@ export async function fetchMarginPoolsBatched(
 
     // Fetch maintainer cap IDs for all pools (single API call to get all events)
     try {
+      const _t1 = performance.now();
       const createdEvents = await fetchMarginPoolCreated({ limit: 100 });
+      console.log(`⏱ [poolData] fetchMarginPoolCreated (indexer): ${(performance.now() - _t1).toFixed(1)}ms`);
       const capIdMap = new Map(
         createdEvents.map(e => [e.margin_pool_id, e.maintainer_cap_id])
       );

@@ -3,11 +3,13 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ReferenceLine,
+  Legend,
 } from "recharts";
 import {
   fetchAssetSupplied,
@@ -31,6 +33,10 @@ import { useChartFirstRender, useStableGradientId } from "../../../components/ch
 
 interface APYHistoryProps {
   pool: PoolOverview;
+  /** When true, hides the header (title + controls) — parent provides them */
+  embedded?: boolean;
+  /** Expose control elements for external rendering (used with embedded) */
+  renderControls?: (controls: React.ReactNode) => void;
 }
 
 interface DailyDataPoint {
@@ -43,16 +49,18 @@ interface DailyDataPoint {
   borrowAPY: number;
 }
 
-export function APYHistory({ pool }: APYHistoryProps) {
+export function APYHistory({ pool, embedded = false }: APYHistoryProps) {
   const { serverUrl } = useAppNetwork();
   const [timeRange, setTimeRange] = React.useState<TimeRange>("1M");
   const [dailyData, setDailyData] = React.useState<DailyDataPoint[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<Error | null>(null);
+  const [showBorrow, setShowBorrow] = React.useState(false);
   
   // Stable chart rendering - prevent flicker on data updates
   const { animationProps } = useChartFirstRender(dailyData.length > 0);
   const gradientId = useStableGradientId('apyGradient');
+  const borrowGradientId = useStableGradientId('borrowApyGradient');
 
   const decimals = pool.contracts?.coinDecimals ?? 9;
   const poolId = pool.contracts?.marginPoolId;
@@ -244,76 +252,130 @@ export function APYHistory({ pool }: APYHistoryProps) {
   const stats = React.useMemo(() => {
     // Use the live calculated APY for "Current APY" to match the pool card
     const currentAPY = liveRates.supplyApr;
+    const currentBorrowAPY = liveRates.borrowApr;
     
     if (dailyData.length === 0)
-      return { avgAPY: currentAPY, maxAPY: currentAPY, minAPY: currentAPY, currentAPY };
+      return {
+        avgAPY: currentAPY, maxAPY: currentAPY, minAPY: currentAPY, currentAPY,
+        avgBorrowAPY: currentBorrowAPY, maxBorrowAPY: currentBorrowAPY, minBorrowAPY: currentBorrowAPY, currentBorrowAPY,
+      };
 
     const apys = dailyData.map((d) => d.supplyAPY);
+    const borrowApys = dailyData.map((d) => d.borrowAPY);
     return {
       avgAPY: apys.reduce((a, b) => a + b, 0) / apys.length,
-      maxAPY: Math.max(...apys, currentAPY), // Include current in peak calculation
-      minAPY: Math.min(...apys, currentAPY), // Include current in low calculation
-      currentAPY, // Always use live value
+      maxAPY: Math.max(...apys, currentAPY),
+      minAPY: Math.min(...apys, currentAPY),
+      currentAPY,
+      avgBorrowAPY: borrowApys.reduce((a, b) => a + b, 0) / borrowApys.length,
+      maxBorrowAPY: Math.max(...borrowApys, currentBorrowAPY),
+      minBorrowAPY: Math.min(...borrowApys, currentBorrowAPY),
+      currentBorrowAPY,
     };
-  }, [dailyData, liveRates.supplyApr]);
+  }, [dailyData, liveRates.supplyApr, liveRates.borrowApr]);
+
+  // Controls for Supply/Borrow toggle and time range
+  const controlsEl = (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 bg-white/5 rounded-lg p-1">
+        <button
+          onClick={() => setShowBorrow(false)}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            !showBorrow
+              ? 'bg-emerald-500 text-white'
+              : 'text-white/60 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          Supply
+        </button>
+        <button
+          onClick={() => setShowBorrow(true)}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+            showBorrow
+              ? 'bg-amber-500 text-white'
+              : 'text-white/60 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          Borrow
+        </button>
+      </div>
+      <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header - matches Activity tab style */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-1">
-            APY History
-          </h2>
-          <p className="text-sm text-white/60">
-            Historical supply APY based on pool utilization for {pool.asset}
-          </p>
+      {/* Header - hidden when embedded in APYPanel */}
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">
+              APY History
+            </h2>
+            <p className="text-sm text-white/60">
+              Historical {showBorrow ? "borrow" : "supply"} APY based on pool utilization for {pool.asset}
+            </p>
+          </div>
+          {controlsEl}
         </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-      </div>
+      )}
+      {/* When embedded, render controls inline for the parent to position */}
+      {embedded && (
+        <div className="flex items-center justify-end">
+          {controlsEl}
+        </div>
+      )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <div className="text-sm text-white/60 mb-1">Current APY</div>
-          <div className="text-2xl font-bold text-emerald-400">
-            {stats.currentAPY < 0.01
-              ? stats.currentAPY.toFixed(4)
-              : stats.currentAPY.toFixed(2)}
-            %
+      {/* Stats Cards - dynamic based on mode */}
+      {(() => {
+        const current = showBorrow ? stats.currentBorrowAPY : stats.currentAPY;
+        const avg = showBorrow ? stats.avgBorrowAPY : stats.avgAPY;
+        const peak = showBorrow ? stats.maxBorrowAPY : stats.maxAPY;
+        const low = showBorrow ? stats.minBorrowAPY : stats.minAPY;
+        const accentColor = showBorrow ? "text-amber-400" : "text-emerald-400";
+        const label = showBorrow ? "Borrow" : "Supply";
+
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+              <div className="text-sm text-white/60 mb-1">Current {label} APY</div>
+              <div className={`text-2xl font-bold ${accentColor}`}>
+                {current < 0.01 ? current.toFixed(4) : current.toFixed(2)}%
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+              <div className="text-sm text-white/60 mb-1">Avg {label} APY</div>
+              <div className="text-2xl font-bold text-cyan-300">
+                {avg < 0.01 ? avg.toFixed(4) : avg.toFixed(2)}%
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+              <div className="text-sm text-white/60 mb-1">Peak {label} APY</div>
+              <div className="text-2xl font-bold text-teal-300">
+                {peak < 0.01 ? peak.toFixed(4) : peak.toFixed(2)}%
+              </div>
+            </div>
+            <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+              <div className="text-sm text-white/60 mb-1">
+                {low === 0 ? `${label} APY Floor` : `Low ${label} APY`}
+              </div>
+              <div className="text-2xl font-bold text-white/70">
+                {low === 0 ? (
+                  <span className="text-sm font-normal text-white/30">Insufficient history</span>
+                ) : (
+                  <>{low < 0.01 ? low.toFixed(4) : low.toFixed(2)}%</>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <div className="text-sm text-white/60 mb-1">Avg APY</div>
-          <div className="text-2xl font-bold text-cyan-300">
-            {stats.avgAPY < 0.01 ? stats.avgAPY.toFixed(4) : stats.avgAPY.toFixed(2)}%
-          </div>
-        </div>
-        <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <div className="text-sm text-white/60 mb-1">Peak APY</div>
-          <div className="text-2xl font-bold text-teal-300">
-            {stats.maxAPY < 0.01 ? stats.maxAPY.toFixed(4) : stats.maxAPY.toFixed(2)}%
-          </div>
-        </div>
-        <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <div className="text-sm text-white/60 mb-1">
-            {stats.minAPY === 0 ? "APY Floor (since launch)" : "Low APY"}
-          </div>
-          <div className="text-2xl font-bold text-white/70">
-            {stats.minAPY === 0 ? (
-              <span className="text-sm font-normal text-white/30">Insufficient history</span>
-            ) : (
-              <>{stats.minAPY < 0.01 ? stats.minAPY.toFixed(4) : stats.minAPY.toFixed(2)}%</>
-            )}
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Chart */}
       <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
         <div className="text-xs text-white/60 flex items-center gap-2 mb-4">
-          Supply APY Over Time
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+          {showBorrow ? "Borrow" : "Supply"} APY Over Time
+          <span className={`w-1.5 h-1.5 rounded-full ${showBorrow ? "bg-amber-400" : "bg-cyan-400"} animate-pulse`}></span>
         </div>
 
         {isLoading && dailyData.length === 0 ? (
@@ -356,8 +418,12 @@ export function APYHistory({ pool }: APYHistoryProps) {
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={showBorrow ? 0.1 : 0.4} />
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id={borrowGradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={showBorrow ? 0.4 : 0.1} />
+                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid
@@ -389,29 +455,57 @@ export function APYHistory({ pool }: APYHistoryProps) {
                   `${value < 0.01 ? value.toFixed(4) : value.toFixed(2)}%`,
                   name === "supplyAPY"
                     ? "Supply APY"
-                    : name === "utilization"
-                      ? "Utilization"
+                    : name === "borrowAPY"
+                      ? "Borrow APY"
                       : name,
                 ]}
               />
               <ReferenceLine
-                y={stats.avgAPY}
+                y={showBorrow ? stats.avgBorrowAPY : stats.avgAPY}
                 stroke="#22d3ee"
                 strokeDasharray="4 4"
                 strokeWidth={1}
               />
+              {/* Always show both lines, with the inactive one dimmed */}
               <Area
                 type="monotone"
                 dataKey="supplyAPY"
                 stroke="#10b981"
-                strokeWidth={2}
+                strokeWidth={showBorrow ? 1 : 2}
+                strokeOpacity={showBorrow ? 0.3 : 1}
                 fill={`url(#${gradientId})`}
                 name="supplyAPY"
+                {...animationProps}
+              />
+              <Area
+                type="monotone"
+                dataKey="borrowAPY"
+                stroke="#f59e0b"
+                strokeWidth={showBorrow ? 2 : 1}
+                strokeOpacity={showBorrow ? 1 : 0.3}
+                fill={`url(#${borrowGradientId})`}
+                name="borrowAPY"
                 {...animationProps}
               />
             </AreaChart>
           </ResponsiveContainer>
         )}
+
+        {/* Legend */}
+        <div className="flex items-center justify-center gap-6 mt-3 pt-3 border-t border-white/10">
+          <div className="flex items-center gap-2 text-xs">
+            <div className={`w-3 h-3 rounded-sm bg-emerald-500 ${showBorrow ? "opacity-30" : ""}`} />
+            <span className={`text-slate-400 ${showBorrow ? "opacity-50" : ""}`}>Supply APY</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <div className={`w-3 h-3 rounded-sm bg-amber-500 ${!showBorrow ? "opacity-30" : ""}`} />
+            <span className={`text-slate-400 ${!showBorrow ? "opacity-50" : ""}`}>Borrow APY</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <div className="w-6 h-0 border-t-2 border-dashed border-cyan-500/50" />
+            <span className="text-slate-400">Average</span>
+          </div>
+        </div>
       </div>
 
       {/* Insight Box */}
@@ -421,25 +515,36 @@ export function APYHistory({ pool }: APYHistoryProps) {
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-white/60">
           <div>
-            <span className="text-white/80 font-medium">Historical Performance</span>
+            <span className="text-white/80 font-medium">{showBorrow ? "Borrowing Cost" : "Historical Performance"}</span>
             <p className="mt-1">
-              Chart shows actual supplier earnings based on utilization. Higher utilization = higher APY but lower withdrawal liquidity.
+              {showBorrow ? (
+                <>Chart shows the cost borrowers pay over time. Higher utilization pushes borrow rates up, especially above the kink point.</>
+              ) : (
+                <>Chart shows actual supplier earnings based on utilization. Higher utilization = higher APY but lower withdrawal liquidity.</>
+              )}
             </p>
           </div>
           <div>
             <span className="text-white/80 font-medium">APY Volatility</span>
             <p className="mt-1">
-              {stats.maxAPY - stats.minAPY > 5 ? (
-                <>Range of {(stats.maxAPY - stats.minAPY).toFixed(1)}% indicates dynamic borrowing demand.</>
-              ) : (
-                <>Stable APY suggests consistent demand and predictable returns.</>
-              )}
+              {(() => {
+                const range = showBorrow
+                  ? stats.maxBorrowAPY - stats.minBorrowAPY
+                  : stats.maxAPY - stats.minAPY;
+                return range > 5
+                  ? <>Range of {range.toFixed(1)}% indicates dynamic borrowing demand.</>
+                  : <>Stable APY suggests consistent demand and predictable returns.</>;
+              })()}
             </p>
           </div>
           <div>
-            <span className="text-white/80 font-medium">Timing</span>
+            <span className="text-white/80 font-medium">{showBorrow ? "Rate Comparison" : "Timing"}</span>
             <p className="mt-1">
-              Dashed line = average APY. Depositing above this line means better-than-average entry.
+              {showBorrow ? (
+                <>Toggle to Supply to compare what suppliers earn vs. what borrowers pay. The spread is protocol revenue.</>
+              ) : (
+                <>Dashed line = average APY. Depositing above this line means better-than-average entry.</>
+              )}
             </p>
           </div>
         </div>

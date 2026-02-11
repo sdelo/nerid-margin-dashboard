@@ -356,7 +356,7 @@ export function ProtocolProofSection() {
       {/* ═══════════════════════════════════════════════════════════════════
           PROTOCOL METRICS HEADER
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-white/[0.04] to-white/[0.01] rounded-xl border border-white/[0.06] p-6">
+      <div className="surface-elevated p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -555,12 +555,12 @@ export function ProtocolProofSection() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          BAD DEBT TIMELINE
+          LIQUIDATION TIMELINE — Activity + Cumulative (toggle)
       ═══════════════════════════════════════════════════════════════════ */}
       <BadDebtTimeline liquidations={liquidations} isLoading={isLoading} />
 
       {/* ═══════════════════════════════════════════════════════════════════
-          LIQUIDATION INSIGHTS - Pool breakdown, distributions, heatmap
+          LIQUIDATION INSIGHTS — Pool breakdown, distributions, heatmap
       ═══════════════════════════════════════════════════════════════════ */}
       <LiquidationInsights liquidations={liquidations} isLoading={isLoading} />
 

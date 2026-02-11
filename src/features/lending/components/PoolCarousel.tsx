@@ -2,8 +2,7 @@ import type { FC } from "react";
 import React from "react";
 import type { PoolOverview } from "../types";
 import { InfoTooltip } from "../../../components/InfoTooltip";
-import { useSuiClient } from "@mysten/dapp-kit";
-import { MarginPool } from "../../../contracts/deepbook_margin/deepbook_margin/margin_pool";
+import type { VaultBalanceMap } from "../../../hooks/useVaultBalances";
 
 function formatNumber(n: number | bigint, decimals: number = 2) {
   const num = Number(n);
@@ -24,44 +23,15 @@ type Props = {
   selectedPoolId?: string | null;
   onSelectPool?: (poolId: string) => void;
   isLoading?: boolean;
+  vaultBalances?: VaultBalanceMap;
 };
 
 export const PoolCarousel: FC<Props> = ({
   pools,
   selectedPoolId,
   isLoading = false,
+  vaultBalances = {},
 }) => {
-  const suiClient = useSuiClient();
-  const [vaultBalances, setVaultBalances] = React.useState<
-    Record<string, number>
-  >({});
-
-  // Fetch vault balances for all pools
-  React.useEffect(() => {
-    async function fetchVaultBalance(pool: PoolOverview) {
-      try {
-        const response = await suiClient.getObject({
-          id: pool.contracts.marginPoolId,
-          options: { showBcs: true },
-        });
-
-        if (response.data?.bcs?.dataType === "moveObject") {
-          const marginPool = MarginPool.fromBase64(response.data.bcs.bcsBytes);
-          const vaultValue =
-            Number(marginPool.vault.value) / 10 ** pool.contracts.coinDecimals;
-          setVaultBalances((prev) => ({ ...prev, [pool.id]: vaultValue }));
-        }
-      } catch (error) {
-        console.error("Error fetching vault balance:", error);
-      }
-    }
-
-    pools.forEach((pool) => fetchVaultBalance(pool));
-    const interval = setInterval(() => {
-      pools.forEach((pool) => fetchVaultBalance(pool));
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [pools, suiClient]);
 
   // Find current pool
   const currentIndex = React.useMemo(() => {

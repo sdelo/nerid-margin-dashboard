@@ -114,7 +114,7 @@ export function getMarginPools(network: NetworkType): PoolConfig[] {
         coinId: c.SUI_ID,
         decimals: 9,
         referralId: c.SUI_MARGIN_POOL_REFERRAL,
-        tradingPair: 'SUI_DBUSDC',
+        tradingPair: 'SUI_USDC',
       },
       {
         asset: 'DBUSDC',
@@ -123,7 +123,7 @@ export function getMarginPools(network: NetworkType): PoolConfig[] {
         coinId: c.DBUSDC_ID,
         decimals: 6,
         referralId: c.DBUSDC_MARGIN_POOL_REFERRAL,
-        tradingPair: 'SUI_DBUSDC', // Quote currency - use same pair
+        tradingPair: 'SUI_USDC', // Quote currency - use same pair
       },
     ];
   }

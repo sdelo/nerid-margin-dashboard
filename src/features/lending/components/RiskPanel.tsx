@@ -344,7 +344,7 @@ function ShockControls({
     positions.forEach(p => {
       if (p.baseAssetSymbol) assets.add(p.baseAssetSymbol);
     });
-    return ['ALL', ...Array.from(assets)] as ShockAsset[];
+    return ['ALL', ...Array.from(assets)];
   }, [positions]);
 
   const presets = [-30, -20, -10, 0, 10];
@@ -355,7 +355,7 @@ function ShockControls({
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-white/40 uppercase tracking-wider">Shock</span>
         <div className="flex bg-white/[0.04] rounded-md p-0.5 border border-white/[0.06]">
-          {availableAssets.slice(0, 4).map(asset => (
+          {availableAssets.map(asset => (
             <button
               key={asset}
               onClick={() => {

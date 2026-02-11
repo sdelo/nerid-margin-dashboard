@@ -20,6 +20,7 @@ type Props = {
   userAddress: string | undefined;
   pools: PoolOverview[];
   positions?: UserPosition[];
+  isLoading?: boolean;
   onViewAllHistory?: () => void;
   onSelectPool: (poolId: string) => void;
 };
@@ -135,6 +136,7 @@ export const PortfolioCard: FC<Props> = ({
   userAddress,
   pools,
   positions = [],
+  isLoading = false,
   onViewAllHistory,
   onSelectPool,
 }) => {
@@ -337,6 +339,22 @@ export const PortfolioCard: FC<Props> = ({
       <div className="surface-elevated p-4">
         <div className="text-xs text-white/40 text-center">
           Connect wallet to view your portfolio
+        </div>
+      </div>
+    );
+  }
+
+  // If loading
+  if (isLoading) {
+    return (
+      <div className="surface-elevated p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+          <h3 className="text-sm font-medium text-white/60">Your portfolio</h3>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-white/40">
+          <div className="w-4 h-4 border-2 border-[#2dd4bf] border-t-transparent rounded-full animate-spin" />
+          Loading positions...
         </div>
       </div>
     );

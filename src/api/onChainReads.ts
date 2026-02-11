@@ -12,85 +12,14 @@ export interface ReferralTrackerData {
 }
 
 /**
- * Fetches the referral tracker data (current_shares, unclaimed_fees) for a referral.
- * This chains margin_pool::protocol_fees and protocol_fees::referral_tracker calls.
- * 
- * @param suiClient - The Sui client instance
- * @param poolId - The margin pool ID
- * @param referralId - The supply referral ID
- * @param assetType - The asset type (e.g., "0x2::sui::SUI")
- * @param packageId - The deepbook margin package ID
- * @returns The referral tracker data or null if error
- */
-export async function fetchReferralTrackerData(
-  suiClient: SuiClient,
-  poolId: string,
-  referralId: string,
-  assetType: string,
-  packageId: string
-): Promise<ReferralTrackerData | null> {
-  try {
-    const tx = new Transaction();
-
-    // First call: get protocol_fees reference from margin pool
-    const protocolFeesRef = tx.moveCall({
-      target: `${packageId}::margin_pool::protocol_fees`,
-      arguments: [tx.object(poolId)],
-      typeArguments: [assetType],
-    });
-
-    // Second call: get referral tracker data using the protocol_fees reference
-    tx.moveCall({
-      target: `${packageId}::protocol_fees::referral_tracker`,
-      arguments: [
-        protocolFeesRef,
-        tx.pure.id(referralId),
-      ],
-      typeArguments: [],
-    });
-
-    const result = await suiClient.devInspectTransactionBlock({
-      transactionBlock: tx,
-      sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
-    });
-
-    if (result.effects.status.status !== 'success') {
-      console.error('[fetchReferralTrackerData] Transaction failed:', result.effects.status);
-      return null;
-    }
-
-    // The second call's result contains (u64, u64) - current_shares and unclaimed_fees
-    if (!result.results || result.results.length < 2) {
-      console.error('[fetchReferralTrackerData] Not enough results:', result.results?.length);
-      return null;
-    }
-
-    const returnValues = result.results[1]?.returnValues;
-    if (!returnValues || returnValues.length < 2) {
-      console.error('[fetchReferralTrackerData] Not enough return values:', returnValues?.length);
-      return null;
-    }
-
-    const currentSharesBytes = returnValues[0][0];
-    const unclaimedFeesBytes = returnValues[1][0];
-
-    const currentShares = BigInt(bcs.U64.parse(new Uint8Array(currentSharesBytes)));
-    const unclaimedFees = BigInt(bcs.U64.parse(new Uint8Array(unclaimedFeesBytes)));
-
-    return {
-      referralId,
-      currentShares,
-      unclaimedFees,
-    };
-  } catch (error) {
-    console.error('[fetchReferralTrackerData] Error for referral', referralId, ':', error);
-    return null;
-  }
-}
-
-/**
- * Fetches referral tracker data for multiple referrals in parallel.
- * Limits concurrency to avoid overwhelming the RPC.
+ * Fetches referral tracker data for ALL referrals in a SINGLE batched
+ * `devInspectTransactionBlock` RPC call.
+ *
+ * Before this optimisation each referral triggered its own RPC round-trip
+ * (N referrals → N calls, 5 at a time). With this change:
+ *   • 1 call to `margin_pool::protocol_fees` (shared across all referrals)
+ *   • N calls to `protocol_fees::referral_tracker` chained in the same PTB
+ *   • = 1 single RPC call total, regardless of referral count
  */
 export async function fetchMultipleReferralTrackers(
   suiClient: SuiClient,
@@ -98,22 +27,74 @@ export async function fetchMultipleReferralTrackers(
   referralIds: string[],
   assetType: string,
   packageId: string,
-  concurrency: number = 5
+  _concurrency?: number, // kept for API compat, no longer used
 ): Promise<Map<string, ReferralTrackerData>> {
   const results = new Map<string, ReferralTrackerData>();
+  if (referralIds.length === 0) return results;
 
-  // Process in batches
-  for (let i = 0; i < referralIds.length; i += concurrency) {
-    const batch = referralIds.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map(id => fetchReferralTrackerData(suiClient, poolId, id, assetType, packageId))
-    );
+  try {
+    const tx = new Transaction();
 
-    batchResults.forEach((data, idx) => {
-      if (data) {
-        results.set(batch[idx], data);
-      }
+    // One shared call: get protocol_fees reference from margin pool
+    const protocolFeesRef = tx.moveCall({
+      target: `${packageId}::margin_pool::protocol_fees`,
+      arguments: [tx.object(poolId)],
+      typeArguments: [assetType],
     });
+
+    // Chain a referral_tracker call for EACH referral in the same transaction
+    for (const referralId of referralIds) {
+      tx.moveCall({
+        target: `${packageId}::protocol_fees::referral_tracker`,
+        arguments: [
+          protocolFeesRef,
+          tx.pure.id(referralId),
+        ],
+        typeArguments: [],
+      });
+    }
+
+    const result = await suiClient.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    });
+
+    if (result.effects.status.status !== 'success') {
+      console.error('[fetchMultipleReferralTrackers] Transaction failed:', result.effects.status);
+      return results;
+    }
+
+    // result.results layout:
+    //   [0] → protocol_fees call (no useful return)
+    //   [1] → referral_tracker for referralIds[0]
+    //   [2] → referral_tracker for referralIds[1]
+    //   …
+    if (!result.results || result.results.length < 1 + referralIds.length) {
+      console.error(
+        '[fetchMultipleReferralTrackers] Unexpected result count:',
+        result.results?.length,
+        'expected',
+        1 + referralIds.length,
+      );
+      return results;
+    }
+
+    for (let i = 0; i < referralIds.length; i++) {
+      const entry = result.results[1 + i]; // skip index 0 (protocol_fees)
+      const returnValues = entry?.returnValues;
+      if (!returnValues || returnValues.length < 2) continue;
+
+      const currentSharesBytes = returnValues[0][0];
+      const unclaimedFeesBytes = returnValues[1][0];
+
+      results.set(referralIds[i], {
+        referralId: referralIds[i],
+        currentShares: BigInt(bcs.U64.parse(new Uint8Array(currentSharesBytes))),
+        unclaimedFees: BigInt(bcs.U64.parse(new Uint8Array(unclaimedFeesBytes))),
+      });
+    }
+  } catch (error) {
+    console.error('[fetchMultipleReferralTrackers] Error:', error);
   }
 
   return results;
@@ -189,4 +170,70 @@ export async function fetchUserCurrentSupply(
   } catch {
     return null;
   }
+}
+
+/**
+ * Position descriptor for batched supply fetching.
+ */
+export interface PositionDescriptor {
+  poolId: string;
+  supplierCapId: string;
+  assetType: string;
+}
+
+/**
+ * Fetches current supply amounts for MULTIPLE positions in a SINGLE
+ * `devInspectTransactionBlock` RPC call. Each position adds one `user_supply_amount`
+ * move call to the same PTB.
+ *
+ * @returns Map from supplierCapId → bigint (current supply in smallest units)
+ */
+export async function fetchMultipleUserCurrentSupply(
+  suiClient: SuiClient,
+  positions: PositionDescriptor[],
+  packageId: string,
+): Promise<Map<string, bigint>> {
+  const results = new Map<string, bigint>();
+  if (positions.length === 0) return results;
+
+  try {
+    const tx = new Transaction();
+
+    for (const pos of positions) {
+      tx.moveCall({
+        target: `${packageId}::margin_pool::user_supply_amount`,
+        arguments: [
+          tx.object(pos.poolId),
+          tx.pure.id(pos.supplierCapId),
+          tx.object('0x6'), // Clock
+        ],
+        typeArguments: [pos.assetType],
+      });
+    }
+
+    const result = await suiClient.devInspectTransactionBlock({
+      transactionBlock: tx,
+      sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    });
+
+    if (result.effects.status.status !== 'success') {
+      return results;
+    }
+
+    if (!result.results) return results;
+
+    for (let i = 0; i < positions.length; i++) {
+      const entry = result.results[i];
+      const returnValues = entry?.returnValues;
+      if (!returnValues || returnValues.length === 0) continue;
+
+      const returnValueBytes = returnValues[0][0];
+      const value = BigInt(bcs.U64.parse(new Uint8Array(returnValueBytes)));
+      results.set(positions[i].supplierCapId, value);
+    }
+  } catch (error) {
+    console.error('[fetchMultipleUserCurrentSupply] Error:', error);
+  }
+
+  return results;
 }

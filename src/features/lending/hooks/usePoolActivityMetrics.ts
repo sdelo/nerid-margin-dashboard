@@ -1,4 +1,4 @@
-import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { 
   fetchAssetSupplied, 
   fetchAssetWithdrawn,
@@ -39,179 +39,172 @@ function getTimeParams7d() {
   };
 }
 
+/**
+ * Processes raw event data into pool activity metrics.
+ * Pure function — no side-effects, easy to cache via React Query.
+ */
+function computeMetrics(
+  pools: PoolOverview[],
+  supplied: Awaited<ReturnType<typeof fetchAssetSupplied>>,
+  withdrawn: Awaited<ReturnType<typeof fetchAssetWithdrawn>>,
+  borrowed: Awaited<ReturnType<typeof fetchLoanBorrowed>>,
+  repaid: Awaited<ReturnType<typeof fetchLoanRepaid>>,
+): Map<string, PoolActivityMetrics> {
+  const newMetrics = new Map<string, PoolActivityMetrics>();
+
+  // Initialize metrics for all pools
+  for (const pool of pools) {
+    const poolId = pool.contracts?.marginPoolId;
+    if (!poolId) continue;
+
+    newMetrics.set(poolId, {
+      poolId,
+      netFlow7d: 0,
+      borrowVolume7d: 0,
+      activeSuppliers7d: 0,
+      activeBorrowers7d: 0,
+      lastBorrowTime: null,
+      lastRepayTime: null,
+      lastSupplyTime: null,
+      lastWithdrawTime: null,
+    });
+  }
+
+  // Get pool decimals map
+  const decimalsMap = new Map<string, number>();
+  for (const pool of pools) {
+    const poolId = pool.contracts?.marginPoolId;
+    if (poolId) {
+      decimalsMap.set(poolId, pool.contracts?.coinDecimals ?? 9);
+    }
+  }
+
+  // Process supplied events
+  const suppliersByPool = new Map<string, Set<string>>();
+  for (const event of supplied) {
+    const poolId = event.margin_pool_id;
+    const metric = newMetrics.get(poolId);
+    if (!metric) continue;
+
+    const decimals = decimalsMap.get(poolId) ?? 9;
+    const amount = parseFloat(event.amount) / (10 ** decimals);
+    metric.netFlow7d += amount;
+    
+    const timestamp = event.checkpoint_timestamp_ms;
+    if (!metric.lastSupplyTime || timestamp > metric.lastSupplyTime) {
+      metric.lastSupplyTime = timestamp;
+    }
+
+    if (!suppliersByPool.has(poolId)) {
+      suppliersByPool.set(poolId, new Set());
+    }
+    suppliersByPool.get(poolId)!.add(event.supplier);
+  }
+
+  // Process withdrawn events
+  for (const event of withdrawn) {
+    const poolId = event.margin_pool_id;
+    const metric = newMetrics.get(poolId);
+    if (!metric) continue;
+
+    const decimals = decimalsMap.get(poolId) ?? 9;
+    const amount = parseFloat(event.amount) / (10 ** decimals);
+    metric.netFlow7d -= amount;
+
+    const timestamp = event.checkpoint_timestamp_ms;
+    if (!metric.lastWithdrawTime || timestamp > metric.lastWithdrawTime) {
+      metric.lastWithdrawTime = timestamp;
+    }
+
+    if (!suppliersByPool.has(poolId)) {
+      suppliersByPool.set(poolId, new Set());
+    }
+    suppliersByPool.get(poolId)!.add(event.supplier);
+  }
+
+  // Process borrowed events
+  const borrowersByPool = new Map<string, Set<string>>();
+  for (const event of borrowed) {
+    const poolId = event.margin_pool_id;
+    const metric = newMetrics.get(poolId);
+    if (!metric) continue;
+
+    const decimals = decimalsMap.get(poolId) ?? 9;
+    const amount = parseFloat(event.loan_amount) / (10 ** decimals);
+    metric.borrowVolume7d += amount;
+
+    const timestamp = event.checkpoint_timestamp_ms;
+    if (!metric.lastBorrowTime || timestamp > metric.lastBorrowTime) {
+      metric.lastBorrowTime = timestamp;
+    }
+
+    if (!borrowersByPool.has(poolId)) {
+      borrowersByPool.set(poolId, new Set());
+    }
+    borrowersByPool.get(poolId)!.add(event.margin_manager_id);
+  }
+
+  // Process repaid events
+  for (const event of repaid) {
+    const poolId = event.margin_pool_id;
+    const metric = newMetrics.get(poolId);
+    if (!metric) continue;
+
+    const timestamp = event.checkpoint_timestamp_ms;
+    if (!metric.lastRepayTime || timestamp > metric.lastRepayTime) {
+      metric.lastRepayTime = timestamp;
+    }
+
+    if (!borrowersByPool.has(poolId)) {
+      borrowersByPool.set(poolId, new Set());
+    }
+    borrowersByPool.get(poolId)!.add(event.margin_manager_id);
+  }
+
+  // Set unique counts
+  for (const [poolId, suppliers] of suppliersByPool) {
+    const metric = newMetrics.get(poolId);
+    if (metric) {
+      metric.activeSuppliers7d = suppliers.size;
+    }
+  }
+
+  for (const [poolId, borrowers] of borrowersByPool) {
+    const metric = newMetrics.get(poolId);
+    if (metric) {
+      metric.activeBorrowers7d = borrowers.size;
+    }
+  }
+
+  return newMetrics;
+}
+
 export function usePoolActivityMetrics(pools: PoolOverview[]): UsePoolActivityMetricsResult {
-  const [metrics, setMetrics] = React.useState<Map<string, PoolActivityMetrics>>(new Map());
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<Error | null>(null);
-
   // Create a stable key for pools array
-  const poolIds = pools.map(p => p.contracts?.marginPoolId).filter(Boolean).join(',');
+  const poolIds = pools.map(p => p.contracts?.marginPoolId).filter(Boolean);
 
-  React.useEffect(() => {
-    if (!pools.length) {
-      setIsLoading(false);
-      return;
-    }
+  const { data: metrics = new Map(), isLoading, error } = useQuery<Map<string, PoolActivityMetrics>>({
+    queryKey: ['poolActivityMetrics', ...poolIds],
+    queryFn: async () => {
+      const timeParams = getTimeParams7d();
 
-    async function fetchMetrics() {
-      try {
-        setIsLoading(true);
-        setError(null);
+      const _t0 = performance.now();
+      const [supplied, withdrawn, borrowed, repaid] = await Promise.all([
+        fetchAssetSupplied({ ...timeParams, limit: 10000 }),
+        fetchAssetWithdrawn({ ...timeParams, limit: 10000 }),
+        fetchLoanBorrowed({ ...timeParams, limit: 10000 }),
+        fetchLoanRepaid({ ...timeParams, limit: 10000 }),
+      ]);
+      console.log(`⏱ [poolActivityMetrics] 4× indexer event fetches: ${(performance.now() - _t0).toFixed(1)}ms`);
 
-        const timeParams = getTimeParams7d();
-        const newMetrics = new Map<string, PoolActivityMetrics>();
+      return computeMetrics(pools, supplied, withdrawn, borrowed, repaid);
+    },
+    enabled: poolIds.length > 0,
+    staleTime: 5 * 60_000,        // Consider data fresh for 5 minutes
+    refetchInterval: 5 * 60_000,  // Auto-refetch every 5 minutes
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
 
-        // Initialize metrics for all pools
-        for (const pool of pools) {
-          const poolId = pool.contracts?.marginPoolId;
-          if (!poolId) continue;
-
-          newMetrics.set(poolId, {
-            poolId,
-            netFlow7d: 0,
-            borrowVolume7d: 0,
-            activeSuppliers7d: 0,
-            activeBorrowers7d: 0,
-            lastBorrowTime: null,
-            lastRepayTime: null,
-            lastSupplyTime: null,
-            lastWithdrawTime: null,
-          });
-        }
-
-        // Fetch all events in parallel (one request per event type, not per pool)
-        const [supplied, withdrawn, borrowed, repaid] = await Promise.all([
-          fetchAssetSupplied({ ...timeParams, limit: 10000 }),
-          fetchAssetWithdrawn({ ...timeParams, limit: 10000 }),
-          fetchLoanBorrowed({ ...timeParams, limit: 10000 }),
-          fetchLoanRepaid({ ...timeParams, limit: 10000 }),
-        ]);
-
-        // Get pool decimals map
-        const decimalsMap = new Map<string, number>();
-        for (const pool of pools) {
-          const poolId = pool.contracts?.marginPoolId;
-          if (poolId) {
-            decimalsMap.set(poolId, pool.contracts?.coinDecimals ?? 9);
-          }
-        }
-
-        // Process supplied events
-        for (const event of supplied) {
-          const poolId = event.margin_pool_id;
-          const metric = newMetrics.get(poolId);
-          if (!metric) continue;
-
-          const decimals = decimalsMap.get(poolId) ?? 9;
-          const amount = parseFloat(event.amount) / (10 ** decimals);
-          metric.netFlow7d += amount;
-          
-          // Track unique suppliers
-          const timestamp = event.checkpoint_timestamp_ms;
-          if (!metric.lastSupplyTime || timestamp > metric.lastSupplyTime) {
-            metric.lastSupplyTime = timestamp;
-          }
-        }
-
-        // Count unique suppliers
-        const suppliersByPool = new Map<string, Set<string>>();
-        for (const event of supplied) {
-          const poolId = event.margin_pool_id;
-          if (!suppliersByPool.has(poolId)) {
-            suppliersByPool.set(poolId, new Set());
-          }
-          suppliersByPool.get(poolId)!.add(event.supplier);
-        }
-
-        // Process withdrawn events
-        for (const event of withdrawn) {
-          const poolId = event.margin_pool_id;
-          const metric = newMetrics.get(poolId);
-          if (!metric) continue;
-
-          const decimals = decimalsMap.get(poolId) ?? 9;
-          const amount = parseFloat(event.amount) / (10 ** decimals);
-          metric.netFlow7d -= amount;
-
-          const timestamp = event.checkpoint_timestamp_ms;
-          if (!metric.lastWithdrawTime || timestamp > metric.lastWithdrawTime) {
-            metric.lastWithdrawTime = timestamp;
-          }
-
-          // Also count withdrawers as active suppliers
-          if (!suppliersByPool.has(poolId)) {
-            suppliersByPool.set(poolId, new Set());
-          }
-          suppliersByPool.get(poolId)!.add(event.supplier);
-        }
-
-        // Process borrowed events
-        const borrowersByPool = new Map<string, Set<string>>();
-        for (const event of borrowed) {
-          const poolId = event.margin_pool_id;
-          const metric = newMetrics.get(poolId);
-          if (!metric) continue;
-
-          const decimals = decimalsMap.get(poolId) ?? 9;
-          const amount = parseFloat(event.loan_amount) / (10 ** decimals);
-          metric.borrowVolume7d += amount;
-
-          const timestamp = event.checkpoint_timestamp_ms;
-          if (!metric.lastBorrowTime || timestamp > metric.lastBorrowTime) {
-            metric.lastBorrowTime = timestamp;
-          }
-
-          // Track unique borrowers via margin_manager_id
-          if (!borrowersByPool.has(poolId)) {
-            borrowersByPool.set(poolId, new Set());
-          }
-          borrowersByPool.get(poolId)!.add(event.margin_manager_id);
-        }
-
-        // Process repaid events (also counts as borrow activity)
-        for (const event of repaid) {
-          const poolId = event.margin_pool_id;
-          const metric = newMetrics.get(poolId);
-          if (!metric) continue;
-
-          const timestamp = event.checkpoint_timestamp_ms;
-          if (!metric.lastRepayTime || timestamp > metric.lastRepayTime) {
-            metric.lastRepayTime = timestamp;
-          }
-
-          // Track unique borrowers
-          if (!borrowersByPool.has(poolId)) {
-            borrowersByPool.set(poolId, new Set());
-          }
-          borrowersByPool.get(poolId)!.add(event.margin_manager_id);
-        }
-
-        // Set unique counts
-        for (const [poolId, suppliers] of suppliersByPool) {
-          const metric = newMetrics.get(poolId);
-          if (metric) {
-            metric.activeSuppliers7d = suppliers.size;
-          }
-        }
-
-        for (const [poolId, borrowers] of borrowersByPool) {
-          const metric = newMetrics.get(poolId);
-          if (metric) {
-            metric.activeBorrowers7d = borrowers.size;
-          }
-        }
-
-        setMetrics(newMetrics);
-      } catch (err) {
-        console.error('Error fetching pool activity metrics:', err);
-        setError(err instanceof Error ? err : new Error('Failed to fetch metrics'));
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchMetrics();
-  }, [poolIds]);
-
-  return { metrics, isLoading, error };
+  return { metrics, isLoading, error: error as Error | null };
 }

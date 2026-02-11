@@ -4,6 +4,7 @@ import {
   ComposedChart,
   Area,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -17,6 +18,7 @@ import {
   type AssetSuppliedEventResponse,
   type AssetWithdrawnEventResponse,
 } from "../api/events";
+import { fetchOHLCV, parseCandles } from "../api/marketData";
 import { type TimeRange, timeRangeToParams } from "../api/types";
 import TimeRangeSelector from "../../../components/TimeRangeSelector";
 import { useAppNetwork } from "../../../context/AppNetworkContext";
@@ -26,6 +28,8 @@ import {
 } from "../../../components/ThemedIcons";
 import type { PoolOverview } from "../types";
 import { useChartFirstRender, useStableGradientId } from "../../../components/charts/StableChart";
+import { useAssetPrice } from "../../../hooks/useAssetPrice";
+import { UsdToggle, type ValueMode } from "../../../components/UsdToggle";
 
 interface PoolActivityProps {
   pool: PoolOverview;
@@ -40,6 +44,7 @@ interface DailyFlowData {
   tvl: number;
   depositCount: number;
   withdrawCount: number;
+  price?: number; // Asset price overlay (if available)
 }
 
 export function PoolActivity({ pool }: PoolActivityProps) {
@@ -48,9 +53,54 @@ export function PoolActivity({ pool }: PoolActivityProps) {
   const [dailyData, setDailyData] = React.useState<DailyFlowData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<Error | null>(null);
+  const [valueMode, setValueMode] = React.useState<ValueMode>("native");
+
+  const { price: usdPrice } = useAssetPrice(pool.asset);
+  const mul = valueMode === "usd" ? usdPrice : 1;
+  const unit = valueMode === "usd" ? "USD" : pool.asset;
+  const prefix = valueMode === "usd" ? "$" : "";
+
+  const [showPriceOverlay, setShowPriceOverlay] = React.useState(false);
+  const [priceData, setPriceData] = React.useState<Map<string, number>>(new Map());
 
   const decimals = pool.contracts?.coinDecimals ?? 9;
   const poolId = pool.contracts?.marginPoolId;
+
+  // Fetch price OHLCV data for overlay
+  React.useEffect(() => {
+    if (!showPriceOverlay) return;
+    // Only fetch for non-stablecoin assets
+    if (pool.asset === "USDC" || pool.asset === "DBUSDC") return;
+
+    async function fetchPriceData() {
+      try {
+        const limitMap: Record<string, number> = { "1W": 7, "1M": 30, "3M": 90, "YTD": 180, "ALL": 365 };
+        const limit = limitMap[timeRange] || 30;
+        // Try USDC pair first, then fall back to SUI pair
+        let candles: Awaited<ReturnType<typeof fetchOHLCV>> = [];
+        try {
+          candles = await fetchOHLCV(`${pool.asset}_USDC`, { interval: "1d", limit });
+        } catch {
+          try {
+            candles = await fetchOHLCV(`${pool.asset}_SUI`, { interval: "1d", limit });
+          } catch {
+            // Neither pair exists
+          }
+        }
+        const parsed = parseCandles(candles);
+
+        const dayPrices = new Map<string, number>();
+        parsed.forEach((c) => {
+          const dateStr = new Date(c.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          dayPrices.set(dateStr, c.close);
+        });
+        setPriceData(dayPrices);
+      } catch (err) {
+        console.warn("Could not fetch price data for overlay:", err);
+      }
+    }
+    fetchPriceData();
+  }, [showPriceOverlay, pool.asset, timeRange]);
 
   // Fetch and process flow data
   React.useEffect(() => {
@@ -236,6 +286,16 @@ export function PoolActivity({ pool }: PoolActivityProps) {
     fetchData();
   }, [timeRange, poolId, decimals, serverUrl, pool.state]);
 
+  // Merge price data into daily data
+  const chartData = React.useMemo(() => {
+    if (!showPriceOverlay || priceData.size === 0) return dailyData;
+    return dailyData.map((d) => {
+      // Strip " (now)" suffix for price lookup
+      const cleanDate = d.date.replace(" (now)", "");
+      return { ...d, price: priceData.get(cleanDate) };
+    });
+  }, [dailyData, priceData, showPriceOverlay]);
+
   // Stable chart rendering - prevent flicker on data updates
   const { animationProps } = useChartFirstRender(dailyData.length > 0);
   const tvlGradientId = useStableGradientId('tvlGradient');
@@ -293,7 +353,23 @@ export function PoolActivity({ pool }: PoolActivityProps) {
             TVL changes and deposit/withdrawal flows for {pool.asset}
           </p>
         </div>
-        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        <div className="flex items-center gap-3">
+          {pool.asset !== "USDC" && pool.asset !== "DBUSDC" && (
+            <button
+              onClick={() => setShowPriceOverlay((prev) => !prev)}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all border ${
+                showPriceOverlay
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  : "bg-white/5 text-white/50 border-white/10 hover:text-white/70"
+              }`}
+              title={`${showPriceOverlay ? "Hide" : "Show"} ${pool.asset} price overlay`}
+            >
+              📈 Price
+            </button>
+          )}
+          <UsdToggle mode={valueMode} onChange={setValueMode} asset={pool.asset} priceUnavailable={usdPrice === 0} />
+          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -302,23 +378,23 @@ export function PoolActivity({ pool }: PoolActivityProps) {
         <div className="bg-white/5 rounded-2xl p-4 border border-teal-500/30">
           <div className="text-sm text-white/60 mb-1">Current TVL</div>
           <div className="text-xl font-bold text-teal-400">
-            {formatNumber(pool.state?.supply ?? 0)}
+            {prefix}{formatNumber((pool.state?.supply ?? 0) * mul)}
           </div>
-          <div className="text-xs text-white/40 mt-1">{pool.asset} (on-chain)</div>
+          <div className="text-xs text-white/40 mt-1">{unit} (on-chain)</div>
         </div>
         <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
           <div className="text-sm text-white/60 mb-1">Deposits ({timeRange})</div>
           <div className="text-xl font-bold text-emerald-400">
-            +{formatNumber(stats.totalDeposits)}
+            +{prefix}{formatNumber(stats.totalDeposits * mul)}
           </div>
-          <div className="text-xs text-white/40 mt-1">{pool.asset}</div>
+          <div className="text-xs text-white/40 mt-1">{unit}</div>
         </div>
         <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
           <div className="text-sm text-white/60 mb-1">Withdrawals ({timeRange})</div>
           <div className="text-xl font-bold text-red-400">
-            -{formatNumber(stats.totalWithdrawals)}
+            -{prefix}{formatNumber(stats.totalWithdrawals * mul)}
           </div>
-          <div className="text-xs text-white/40 mt-1">{pool.asset}</div>
+          <div className="text-xs text-white/40 mt-1">{unit}</div>
         </div>
         <div
           className={`bg-white/5 rounded-2xl p-4 border ${
@@ -333,8 +409,8 @@ export function PoolActivity({ pool }: PoolActivityProps) {
               stats.netChange >= 0 ? "text-emerald-400" : "text-red-400"
             }`}
           >
-            {stats.netChange >= 0 ? "+" : ""}
-            {formatNumber(stats.netChange)}
+            {stats.netChange >= 0 ? "+" : ""}{prefix}
+            {formatNumber(Math.abs(stats.netChange) * mul)}
           </div>
           <div className="text-xs text-white/40 mt-1">
             {stats.netChange >= 0 ? "Pool growing" : "Pool shrinking"}
@@ -390,7 +466,7 @@ export function PoolActivity({ pool }: PoolActivityProps) {
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             <ComposedChart
-              data={dailyData}
+              data={chartData}
               margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
             >
               <defs>
@@ -458,8 +534,13 @@ export function PoolActivity({ pool }: PoolActivityProps) {
                     deposits: "Deposits",
                     withdrawals: "Withdrawals",
                     tvl: "TVL",
+                    price: `${pool.asset} Price`,
                   };
-                  return [formatNumber(value), labels[name] || name];
+                  if (name === "price") {
+                    return [`$${value?.toFixed(4) ?? "—"}`, labels[name]];
+                  }
+                  const displayVal = Math.abs(value) * mul;
+                  return [`${prefix}${formatNumber(displayVal)} ${unit}`, labels[name] || name];
                 }}
               />
               <Legend
@@ -469,6 +550,7 @@ export function PoolActivity({ pool }: PoolActivityProps) {
                     deposits: "Deposits",
                     withdrawals: "Withdrawals",
                     tvl: "TVL",
+                    price: `${pool.asset} Price`,
                   };
                   return (
                     <span className="text-white/80 text-sm">
@@ -513,6 +595,21 @@ export function PoolActivity({ pool }: PoolActivityProps) {
                 opacity={0.8}
                 {...animationProps}
               />
+              {/* Price overlay line (hidden axis) */}
+              {showPriceOverlay && priceData.size > 0 && (
+                <Line
+                  yAxisId="flow"
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  name="price"
+                  connectNulls
+                  {...animationProps}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         )}

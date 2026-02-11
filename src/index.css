@@ -192,3 +192,13 @@ body {
 a {
   text-decoration: none;
 }
+
+/* Drawer slide-in animation */
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

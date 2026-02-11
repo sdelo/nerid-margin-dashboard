@@ -18,22 +18,6 @@ function formatNumber(n: number, decimals: number = 2) {
   });
 }
 
-function formatTimeAgo(timestamp: number | null): string {
-  if (!timestamp) return "—";
-  
-  const now = Date.now();
-  const diffMs = now - timestamp;
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMins < 1) return "now";
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 30) return `${diffDays}d`;
-  return `${Math.floor(diffDays / 30)}mo`;
-}
-
 function formatFlowNumber(n: number): { text: string; isPositive: boolean; isZero: boolean } {
   const absValue = Math.abs(n);
   let text: string;
@@ -90,14 +74,6 @@ export const PoolCompareTable: FC<Props> = ({
 
   // Default to "my" if user has positions, otherwise "all"
   const [filterMode, setFilterMode] = useState<FilterMode>(hasPositions ? "my" : "all");
-
-  // Update filter when positions change (e.g., first load)
-  React.useEffect(() => {
-    if (hasPositions && filterMode === "all") {
-      // Only auto-switch if they just got positions
-      // Keep their choice if they manually switched
-    }
-  }, [hasPositions, filterMode]);
 
   // Filter pools based on mode
   const filteredPools = useMemo(() => {
@@ -168,7 +144,7 @@ export const PoolCompareTable: FC<Props> = ({
       )}
 
       {sortedPools.length > 0 && (
-        <table className="w-full min-w-[800px]">
+        <table className="w-full">
           <thead>
             <tr className="text-[10px] text-white/40 uppercase tracking-wider">
               <th className="text-left font-medium pb-2.5 pl-3">Asset</th>
@@ -178,32 +154,12 @@ export const PoolCompareTable: FC<Props> = ({
                   You
                 </span>
               </th>
-              <th className="text-right font-medium pb-2.5">Supplied</th>
-              <th className="text-right font-medium pb-2.5">Borrowed</th>
               <th className="text-right font-medium pb-2.5">APY</th>
               <th className="text-right font-medium pb-2.5">Util</th>
               <th className="text-right font-medium pb-2.5">
                 <span className="inline-flex items-center whitespace-nowrap">
                   Flow 7d
-                  <InfoTooltip tooltip="netFlow7d" size="sm" />
-                </span>
-              </th>
-              <th className="text-right font-medium pb-2.5">
-                <span className="inline-flex items-center whitespace-nowrap">
-                  Vol 7d
-                  <InfoTooltip tooltip="borrowVolume7d" size="sm" />
-                </span>
-              </th>
-              <th className="text-right font-medium pb-2.5">
-                <span className="inline-flex items-center whitespace-nowrap">
-                  Users 7d
-                  <InfoTooltip tooltip="activeUsers7d" size="sm" />
-                </span>
-              </th>
-              <th className="text-right font-medium pb-2.5">
-                <span className="inline-flex items-center">
-                  Last
-                  <InfoTooltip tooltip="lastActivity" size="sm" />
+                  <InfoTooltip tooltip="Net supply flow over the last 7 days" size="sm" />
                 </span>
               </th>
               <th className="w-6 pb-2.5"></th>
@@ -225,14 +181,6 @@ export const PoolCompareTable: FC<Props> = ({
               // Get activity metrics for this pool
               const poolId = pool.contracts?.marginPoolId;
               const poolMetrics = poolId ? metrics.get(poolId) : null;
-              
-              // Calculate last activity from all event types
-              const lastActivityTime = poolMetrics ? Math.max(
-                poolMetrics.lastBorrowTime ?? 0,
-                poolMetrics.lastRepayTime ?? 0,
-                poolMetrics.lastSupplyTime ?? 0,
-                poolMetrics.lastWithdrawTime ?? 0,
-              ) : null;
               
               // Format net flow
               const flowFormatted = poolMetrics 
@@ -293,24 +241,6 @@ export const PoolCompareTable: FC<Props> = ({
                     )}
                   </td>
 
-                  {/* Supplied (TVL) */}
-                  <td className="py-2.5 text-right">
-                    <span className={`text-xs font-mono ${isSelected ? "text-white" : "text-white/50"}`}>
-                      {formatNumber(pool.state.supply, 0)}
-                    </span>
-                  </td>
-
-                  {/* Borrowed (Open Interest) */}
-                  <td className="py-2.5 text-right">
-                    <span className={`text-xs font-mono ${
-                      pool.state.borrow > 0 
-                        ? isSelected ? "text-amber-300" : "text-amber-400/70"
-                        : "text-white/30"
-                    }`}>
-                      {pool.state.borrow > 0 ? formatNumber(pool.state.borrow, 0) : "—"}
-                    </span>
-                  </td>
-
                   {/* APY */}
                   <td className="py-2.5 text-right">
                     <span
@@ -350,66 +280,6 @@ export const PoolCompareTable: FC<Props> = ({
                             : "text-red-400"
                       }`}>
                         {flowFormatted.text}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Borrow Volume 7d */}
-                  <td className="py-2.5 text-right">
-                    {metricsLoading ? (
-                      <span className="text-xs text-white/30 animate-pulse">···</span>
-                    ) : (
-                      <span className={`text-xs font-mono ${
-                        poolMetrics?.borrowVolume7d && poolMetrics.borrowVolume7d > 0
-                          ? isSelected ? "text-white" : "text-white/50"
-                          : "text-white/30"
-                      }`}>
-                        {poolMetrics?.borrowVolume7d && poolMetrics.borrowVolume7d > 0 
-                          ? formatNumber(poolMetrics.borrowVolume7d, 0)
-                          : "—"
-                        }
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Active Users 7d */}
-                  <td className="py-2.5 text-right">
-                    {metricsLoading ? (
-                      <span className="text-xs text-white/30 animate-pulse">···</span>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1">
-                        <span className={`text-xs font-mono ${
-                          (poolMetrics?.activeSuppliers7d ?? 0) > 0
-                            ? isSelected ? "text-white" : "text-white/50"
-                            : "text-white/30"
-                        }`}>
-                          {poolMetrics?.activeSuppliers7d ?? 0}
-                        </span>
-                        <span className="text-[10px] text-white/30">/</span>
-                        <span className={`text-xs font-mono ${
-                          (poolMetrics?.activeBorrowers7d ?? 0) > 0
-                            ? isSelected ? "text-amber-300" : "text-amber-400/60"
-                            : "text-white/30"
-                        }`}>
-                          {poolMetrics?.activeBorrowers7d ?? 0}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-
-                  {/* Last Activity */}
-                  <td className="py-2.5 text-right">
-                    {metricsLoading ? (
-                      <span className="text-xs text-white/30 animate-pulse">···</span>
-                    ) : (
-                      <span className={`text-xs font-mono ${
-                        lastActivityTime && lastActivityTime > Date.now() - 24 * 60 * 60 * 1000
-                          ? "text-emerald-400"
-                          : lastActivityTime && lastActivityTime > Date.now() - 7 * 24 * 60 * 60 * 1000
-                          ? isSelected ? "text-white" : "text-white/50"
-                          : "text-white/30"
-                      }`}>
-                        {formatTimeAgo(lastActivityTime || null)}
                       </span>
                     )}
                   </td>

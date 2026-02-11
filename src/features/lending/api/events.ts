@@ -469,10 +469,13 @@ export async function fetchLatestDeepbookPoolConfig(
   poolId: string
 ): Promise<DeepbookPoolRegisteredEventResponse | DeepbookPoolConfigUpdatedEventResponse | null> {
   try {
+    // Use start_time: 0 to fetch ALL config events regardless of MIN_CHART_START_TIME.
+    // Pool registration / enable events may predate the chart cutoff date.
+    const allTimeParams = { pool_id: poolId, start_time: 0 };
     const [registeredEvents, configUpdatedEvents, registryUpdateEvents] = await Promise.all([
-      fetchDeepbookPoolRegistered({ pool_id: poolId }),
-      fetchDeepbookPoolConfigUpdated({ pool_id: poolId }),
-      fetchDeepbookPoolUpdatedRegistry({ pool_id: poolId }),
+      fetchDeepbookPoolRegistered(allTimeParams),
+      fetchDeepbookPoolConfigUpdated(allTimeParams),
+      fetchDeepbookPoolUpdatedRegistry(allTimeParams),
     ]);
 
     // Get the latest config (from registered or config_updated)

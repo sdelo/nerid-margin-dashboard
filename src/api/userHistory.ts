@@ -41,78 +41,67 @@ export async function fetchUserOriginalValue(
   currentShares: bigint
 ): Promise<bigint | null> {
   try {
-    // Fetch supply events for this specific supplier cap
-    const userSupplies = await fetchAssetSupplied({
-      margin_pool_id: poolId,
-      supplier: supplierCapId,
-      limit: 10000,
-    });
-    
-    // Fetch withdrawal events for this specific supplier cap
-    const userWithdrawals = await fetchAssetWithdrawn({
-      margin_pool_id: poolId,
-      supplier: supplierCapId,
-      limit: 10000,
-    });
+    // Fetch supply AND withdrawal events IN PARALLEL (was sequential before)
+    const [userSupplies, userWithdrawals] = await Promise.all([
+      fetchAssetSupplied({
+        margin_pool_id: poolId,
+        supplier: supplierCapId,
+        limit: 10000,
+      }),
+      fetchAssetWithdrawn({
+        margin_pool_id: poolId,
+        supplier: supplierCapId,
+        limit: 10000,
+      }),
+    ]);
     
     if (userSupplies.length === 0) {
       return null; // Return null to indicate indexer data unavailable
     }
     
-    // Calculate total cost basis from all deposits
-    // Sum up all the tokens spent to acquire shares
-    let totalCost = 0n;
-    let totalSharesAcquired = 0n;
-    
-    for (const event of userSupplies) {
-      // Get shares and amount, converting strings to BigInt safely
-      const sharesRaw = (event as any).supply_shares ?? (event as any).shares ?? '0';
-      const amountRaw = (event as any).supply_amount ?? event.amount ?? '0';
-      
-      const shares = BigInt(String(sharesRaw));
-      const amount = BigInt(String(amountRaw));
-      
-      totalSharesAcquired += shares;
-      totalCost += amount; // Total amount deposited
-    }
-    
-    // Adjust for withdrawals using weighted-average cost accounting
-    // When shares are withdrawn, we remove a proportional amount of the cost basis
-    // Example: If user spent 210 tokens for 200 shares, then withdraws 50 shares:
-    //   Cost to remove = (210 / 200) × 50 = 52.5 tokens
-    //   Remaining cost basis = 210 - 52.5 = 157.5 tokens for 150 shares
-    let netShares = totalSharesAcquired;
-    let netCost = totalCost;
-    
-    for (const event of userWithdrawals) {
-      const sharesWithdrawnRaw = (event as any).withdraw_shares ?? (event as any).shares ?? '0';
-      const sharesWithdrawn = BigInt(String(sharesWithdrawnRaw));
-      
-      if (netShares > 0n) {
-        // Calculate average cost per share, then multiply by shares withdrawn
-        const costToRemove = (netCost * sharesWithdrawn) / netShares;
-        netCost -= costToRemove;
-        netShares -= sharesWithdrawn;
-      }
-    }
-    
-    if (netShares === 0n || netCost === 0n) {
-      return 0n;
-    }
-    
-    // Calculate average cost per share using high precision
-    // Use scaling factor to avoid rounding errors with integer division
-    const SCALING = 1_000_000_000_000n; // 1 trillion for precision
-    const avgCostPerShare = (netCost * SCALING) / netShares;
-    
-    // Original value of CURRENT shares = currentShares × avgCostPerShare
-    const originalValue = (currentShares * avgCostPerShare) / SCALING;
-    
-    return originalValue;
+    return computeCostBasis(userSupplies, userWithdrawals, currentShares);
   } catch (error) {
     console.error('Error calculating user original value:', error);
     return null;
   }
+}
+
+/**
+ * Pure cost-basis calculation shared by single and batch fetch.
+ */
+function computeCostBasis(
+  supplies: AssetSuppliedEventResponse[],
+  withdrawals: AssetWithdrawnEventResponse[],
+  currentShares: bigint,
+): bigint {
+  let totalCost = 0n;
+  let totalSharesAcquired = 0n;
+
+  for (const event of supplies) {
+    const sharesRaw = (event as any).supply_shares ?? (event as any).shares ?? '0';
+    const amountRaw = (event as any).supply_amount ?? event.amount ?? '0';
+    totalSharesAcquired += BigInt(String(sharesRaw));
+    totalCost += BigInt(String(amountRaw));
+  }
+
+  let netShares = totalSharesAcquired;
+  let netCost = totalCost;
+
+  for (const event of withdrawals) {
+    const sharesWithdrawnRaw = (event as any).withdraw_shares ?? (event as any).shares ?? '0';
+    const sharesWithdrawn = BigInt(String(sharesWithdrawnRaw));
+    if (netShares > 0n) {
+      const costToRemove = (netCost * sharesWithdrawn) / netShares;
+      netCost -= costToRemove;
+      netShares -= sharesWithdrawn;
+    }
+  }
+
+  if (netShares === 0n || netCost === 0n) return 0n;
+
+  const SCALING = 1_000_000_000_000n;
+  const avgCostPerShare = (netCost * SCALING) / netShares;
+  return (currentShares * avgCostPerShare) / SCALING;
 }
 
 /**
@@ -127,19 +116,19 @@ export async function fetchUserPositionHistory(
   netPrincipal: bigint;
 } | null> {
   try {
-    // Fetch supply events for this specific supplier cap in this pool
-    const userSupplies = await fetchAssetSupplied({
-      margin_pool_id: poolId,
-      supplier: supplierCapId,
-      limit: 10000,
-    });
-    
-    // Fetch withdrawal events for this specific supplier cap in this pool
-    const userWithdrawals = await fetchAssetWithdrawn({
-      margin_pool_id: poolId,
-      supplier: supplierCapId,
-      limit: 10000,
-    });
+    // Fetch supply and withdrawal events in parallel
+    const [userSupplies, userWithdrawals] = await Promise.all([
+      fetchAssetSupplied({
+        margin_pool_id: poolId,
+        supplier: supplierCapId,
+        limit: 10000,
+      }),
+      fetchAssetWithdrawn({
+        margin_pool_id: poolId,
+        supplier: supplierCapId,
+        limit: 10000,
+      }),
+    ]);
     
     // Calculate net principal
     const totalSupplied = userSupplies.reduce(

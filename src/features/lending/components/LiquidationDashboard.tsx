@@ -2,21 +2,37 @@ import React from "react";
 import { useAtRiskPositions, type AtRiskPosition } from "../../../hooks/useAtRiskPositions";
 import { LiveRiskMonitor } from "./LiveRiskMonitor";
 import { ProtocolProofSection } from "./ProtocolProofSection";
+import { MarketOverview } from "./MarketOverview";
+import { LiquidationHeatmap } from "./LiquidationHeatmap";
+import { WalletDrawer } from "./WalletDrawer";
 import { TransactionDetailsModal } from "../../../components/TransactionButton/TransactionDetailsModal";
 import { CONTRACTS, type NetworkType } from "../../../config/contracts";
 import { useSuiClientContext, useSuiClient, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { ScenarioProvider } from "../../../context/ScenarioContext";
 import { buildLiquidateTransaction } from "../../../lib/suiTransactions";
 import { TransactionToast, type TransactionToastState } from "../../../components/TransactionToast";
+import { fetchLiquidations, type LiquidationEventResponse } from "../api/events";
+import { LiveActivityFeed } from "./LiveActivityFeed";
+import { getPositionDirection } from "../../../hooks/useAtRiskPositions";
 
 /**
- * Unified Liquidation Center
- * 
- * A single-page dashboard covering:
- * 1. System Status Hero - Health verdict + key metrics at a glance
- * 2. Live Risk Monitor - Sortable table with all positions, status badges, one-click liquidate
- * 3. Protocol Proof - Historical stats, bad debt tracking, liquidator leaderboard
+ * Liquidation Center — Spectator-first single-page scroll layout
+ *
+ * Redesign principles:
+ * - Feel something in 3 seconds, not 30
+ * - Hot positions with health bars are the hero
+ * - Emotional read is immediate (danger meter, not buffer percentages)
+ * - Analytical depth is one scroll deeper
  */
+
+// ─── Section IDs for scroll nav ──────────────────────────────────────────────
+const SECTIONS = [
+  { id: 'market', label: 'Market' },
+  { id: 'positions', label: 'Positions' },
+  { id: 'risk', label: 'Risk Monitor' },
+  { id: 'map', label: 'Liq Map' },
+  { id: 'history', label: 'History' },
+] as const;
 
 function formatUsd(value: number): string {
   if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
@@ -36,26 +52,51 @@ function calculateNetProfit(position: AtRiskPosition): number {
   return grossReward - estimatedGasCost - estimatedSlippage;
 }
 
-type ExploreTab = 'monitor' | 'proof';
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'Just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return `${Math.floor(diff / 604_800_000)}w ago`;
+}
 
 export function LiquidationDashboard() {
   const { network } = useSuiClientContext();
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
-  
-  const [activeTab, setActiveTab] = React.useState<ExploreTab>('monitor');
+
   const [selectedPosition, setSelectedPosition] = React.useState<AtRiskPosition | null>(null);
   const [showTxModal, setShowTxModal] = React.useState(false);
+
+  // Global coin selector state
+  const [selectedCoins, setSelectedCoins] = React.useState<string[]>([]);
+
+  // Wallet drawer state
+  const [drawerPosition, setDrawerPosition] = React.useState<AtRiskPosition | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+
+  const handleOpenWallet = React.useCallback((position: AtRiskPosition) => {
+    setDrawerPosition(position);
+    setIsDrawerOpen(true);
+  }, []);
+
   const [isLiquidating, setIsLiquidating] = React.useState(false);
   const [liquidationError, setLiquidationError] = React.useState<string | null>(null);
-  
+
   // Transaction toast state
   const [toastState, setToastState] = React.useState<TransactionToastState>("pending");
   const [toastVisible, setToastVisible] = React.useState(false);
   const [toastTxDigest, setToastTxDigest] = React.useState<string | undefined>();
   const [toastError, setToastError] = React.useState<string | null>(null);
   const [toastAmount, setToastAmount] = React.useState<string | undefined>();
+
+  // Section scroll nav — active section tracking
+  const [activeSection, setActiveSection] = React.useState<string>('market');
+
+  // Last liquidation event
+  const [lastLiquidation, setLastLiquidation] = React.useState<{ timestamp: number; amount: number } | null>(null);
 
   const contracts = network === 'mainnet' ? CONTRACTS.mainnet : CONTRACTS.testnet;
 
@@ -71,37 +112,148 @@ export function LiquidationDashboard() {
     lastUpdated,
   } = useAtRiskPositions();
 
-  // Calculate additional metrics
-  const metrics = React.useMemo(() => {
-    const liquidatablePositions = positions.filter(p => p.isLiquidatable);
-    const totalLiquidatableDebt = liquidatablePositions.reduce((sum, p) => sum + p.totalDebtUsd, 0);
-    const totalProfit = liquidatablePositions.reduce((sum, p) => sum + calculateNetProfit(p), 0);
-    
-    const nonLiquidatable = positions.filter(p => !p.isLiquidatable);
-    const smallestBuffer = nonLiquidatable.length > 0
-      ? Math.min(...nonLiquidatable.map(p => p.distanceToLiquidation))
-      : null;
-    
-    const criticalCount = positions.filter(p => !p.isLiquidatable && p.distanceToLiquidation < 10).length;
-    const watchCount = positions.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 10 && p.distanceToLiquidation < 25).length;
-    
+  // ─── Fetch last liquidation event ──────────────────────────────────────────
+  React.useEffect(() => {
+    async function fetchLastLiq() {
+      try {
+        const liqs = await fetchLiquidations({ limit: 1, start_time: 0 });
+        if (liqs.length > 0) {
+          const liq = liqs.sort((a: LiquidationEventResponse, b: LiquidationEventResponse) =>
+            b.checkpoint_timestamp_ms - a.checkpoint_timestamp_ms
+          )[0];
+          setLastLiquidation({
+            timestamp: liq.checkpoint_timestamp_ms,
+            amount: parseFloat(liq.liquidation_amount) / 1e9,
+          });
+        }
+      } catch {
+        // silently fail — this is supplementary data
+      }
+    }
+    fetchLastLiq();
+  }, []);
+
+  // ─── Intersection observer for scroll nav ─────────────────────────────────
+  React.useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
+      },
+      { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
+    );
+
+    SECTIONS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // ─── Discover available base assets ────────────────────────────────────────
+  const availableCoins = React.useMemo(() => {
+    const coins = new Set<string>();
+    positions.forEach(p => {
+      if (p.baseAssetSymbol && p.totalDebtUsd > 0.001) {
+        coins.add(p.baseAssetSymbol);
+      }
+    });
+    return Array.from(coins).sort();
+  }, [positions]);
+
+  // ─── Filter positions by selected coins ────────────────────────────────────
+  const filteredPositions = React.useMemo(() => {
+    if (selectedCoins.length === 0) return positions; // all coins
+    return positions.filter(p => selectedCoins.includes(p.baseAssetSymbol));
+  }, [positions, selectedCoins]);
+
+  // ─── Coin selector helpers ─────────────────────────────────────────────────
+  const toggleCoin = React.useCallback((coin: string) => {
+    setSelectedCoins(prev => {
+      if (prev.includes(coin)) {
+        return prev.filter(c => c !== coin);
+      } else {
+        return [...prev, coin];
+      }
+    });
+  }, []);
+
+  const selectAllCoins = React.useCallback(() => {
+    setSelectedCoins([]);
+  }, []);
+
+  // ─── Danger Metrics ────────────────────────────────────────────────────────
+  const dangerMetrics = React.useMemo(() => {
+    const liquidatable = filteredPositions.filter(p => p.isLiquidatable);
+    const critical = filteredPositions.filter(p => !p.isLiquidatable && p.distanceToLiquidation < 10);
+    const watching = filteredPositions.filter(p => !p.isLiquidatable && p.distanceToLiquidation >= 10 && p.distanceToLiquidation < 25);
+
+    const inDanger = liquidatable.length + critical.length;
+    const totalDebtInDanger = [...liquidatable, ...critical].reduce((s, p) => s + p.totalDebtUsd, 0);
+
     return {
-      totalPositions: positions.length,
-      liquidatablePositions: liquidatableCount,
-      totalLiquidatableDebt,
-      totalProfit,
-      smallestBuffer,
-      criticalCount,
-      watchCount,
+      inDanger,
+      totalDebtInDanger,
+      liquidatableCount: liquidatable.length,
+      criticalCount: critical.length,
+      watchingCount: watching.length,
+      totalPositions: filteredPositions.length,
     };
-  }, [positions, liquidatableCount]);
+  }, [filteredPositions]);
 
   // System status
-  const systemStatus = liquidatableCount > 0 
-    ? 'critical' 
-    : metrics.smallestBuffer !== null && metrics.smallestBuffer < 10 
-      ? 'stressed' 
+  const systemStatus = dangerMetrics.liquidatableCount > 0
+    ? 'critical'
+    : dangerMetrics.criticalCount > 0
+      ? 'stressed'
       : 'healthy';
+
+  // ─── Dynamic Narrative One-Liner ──────────────────────────────────────────
+  const narrativeLine = React.useMemo(() => {
+    if (filteredPositions.length === 0) return null;
+
+    // Compute positioning for narrative
+    let longCount = 0;
+    let shortCount = 0;
+    filteredPositions.forEach(p => {
+      const { direction } = getPositionDirection(p);
+      if (direction === 'LONG') longCount++;
+      else shortCount++;
+    });
+    const total = longCount + shortCount;
+    const longPct = total > 0 ? Math.round((longCount / total) * 100) : 50;
+    const isCrowded = longPct > 70 || longPct < 30;
+    const crowdedSide = longPct > 50 ? 'long' : 'short';
+
+    const parts: string[] = [];
+
+    // Crowdedness
+    if (isCrowded) {
+      parts.push(`${Math.max(longPct, 100 - longPct)}% ${crowdedSide}`);
+    } else {
+      parts.push('balanced positioning');
+    }
+
+    // Danger
+    if (dangerMetrics.liquidatableCount > 0) {
+      parts.push(`${dangerMetrics.liquidatableCount} liquidatable now`);
+    } else if (dangerMetrics.inDanger > 0) {
+      parts.push(`${dangerMetrics.inDanger} in danger`);
+    } else {
+      parts.push('all positions safe');
+    }
+
+    // Recency
+    if (lastLiquidation) {
+      parts.push(`last rekt ${timeAgo(lastLiquidation.timestamp)}`);
+    }
+
+    return parts.join(' · ');
+  }, [filteredPositions, dangerMetrics, lastLiquidation]);
 
   const handleLiquidate = (position: AtRiskPosition) => {
     setSelectedPosition(position);
@@ -117,7 +269,7 @@ export function LiquidationDashboard() {
 
     setIsLiquidating(true);
     setLiquidationError(null);
-    
+
     // Show pending toast immediately
     setToastState("pending");
     setToastVisible(true);
@@ -125,14 +277,9 @@ export function LiquidationDashboard() {
     setToastError(null);
 
     try {
-      // Calculate repay amount based on position debt
-      // For quote debt (most common), use quote decimals (6 for USDC)
-      // For base debt, use base decimals (9 for SUI)
       const hasQuoteDebt = selectedPosition.quoteDebt > 0;
       const decimals = hasQuoteDebt ? 6 : 9;
       const debtAmount = hasQuoteDebt ? selectedPosition.quoteDebt : selectedPosition.baseDebt;
-      
-      // Repay the full debt amount (the contract will handle partial liquidations)
       const repayAmount = BigInt(Math.ceil(debtAmount * Math.pow(10, decimals)));
 
       const tx = await buildLiquidateTransaction({
@@ -143,42 +290,36 @@ export function LiquidationDashboard() {
         suiClient,
       });
 
-      const result = await signAndExecute({ 
-        transaction: tx, 
-        chain: `sui:${network}` 
+      const result = await signAndExecute({
+        transaction: tx,
+        chain: `sui:${network}`
       });
 
-      // Wait for transaction confirmation
       const txResult = await suiClient.waitForTransaction({
         digest: result.digest,
         options: { showEffects: true },
       });
 
-      // Check if transaction was successful
       const status = txResult.effects?.status?.status;
       if (status === 'failure') {
         const error = txResult.effects?.status?.error || 'Transaction failed';
         throw new Error(error);
       }
 
-      // Success - close modal and refresh positions
       setShowTxModal(false);
       setSelectedPosition(null);
       refetchPositions();
-      
-      // Show success toast
+
       setToastState("finalized");
       setToastTxDigest(result.digest);
       setToastAmount(formatUsd(selectedPosition.totalDebtUsd));
-      
+
       console.log(`Liquidation successful! TX: ${result.digest}`);
     } catch (error: any) {
       console.error("Liquidation failed:", error);
-      
-      // Parse the error message for better UX
+
       let errorMessage = error.message || "Liquidation failed";
-      
-      // Handle common Move abort errors
+
       if (errorMessage.includes('MoveAbort') && errorMessage.includes('9')) {
         errorMessage = "Position is no longer liquidatable. The price may have moved or another liquidator got there first.";
       } else if (errorMessage.includes('MoveAbort') && errorMessage.includes('13')) {
@@ -188,10 +329,9 @@ export function LiquidationDashboard() {
       } else if (errorMessage.includes('rejected') || errorMessage.includes('denied')) {
         errorMessage = "Transaction was rejected by wallet.";
       }
-      
+
       setLiquidationError(errorMessage);
-      
-      // Show error toast
+
       setToastState("error");
       setToastError(errorMessage);
     } finally {
@@ -204,7 +344,7 @@ export function LiquidationDashboard() {
     packageId: contracts.MARGIN_PACKAGE_ID,
     module: 'margin_manager',
     function: 'liquidate',
-    summary: `Attempt to liquidate position with ${formatUsd(selectedPosition.totalDebtUsd)} debt. Est. profit: ${formatUsd(calculateNetProfit(selectedPosition))}. ⚠️ May fail if price moved.`,
+    summary: `Attempt to liquidate position with ${formatUsd(selectedPosition.totalDebtUsd)} debt. Est. profit: ${formatUsd(calculateNetProfit(selectedPosition))}. ⚠️ May fail if price moves.`,
     sourceCodeUrl: `https://suivision.xyz/package/${contracts.MARGIN_PACKAGE_ID}`,
     arguments: [
       { name: 'Position', value: formatAddress(selectedPosition.marginManagerId) },
@@ -214,254 +354,348 @@ export function LiquidationDashboard() {
     ],
   } : null;
 
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <ScenarioProvider>
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* ═══════════════════════════════════════════════════════════════════
-          PAGE HEADER - Title, description, live indicator
+          PAGE HEADER — Title + Coin Selector (accented)
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            Liquidation Center
-            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wide ${
-              systemStatus === 'healthy'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
-                : systemStatus === 'stressed'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
-                  : 'bg-rose-500/20 text-rose-300 border border-rose-400/30'
-            }`}>
-              {systemStatus === 'healthy' ? 'Healthy' : systemStatus === 'stressed' ? 'Stressed' : 'Critical'}
-            </span>
-          </h1>
-          <p className="text-sm text-white/50 mt-1">
-            Monitor system risk, find opportunities, verify protocol health
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {/* Last updated */}
-          {lastUpdated && (
-            <span className="text-xs text-white/40">
-              Updated {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          
-          {/* Live indicator */}
-          <span className="flex items-center gap-2 text-xs text-white/60 bg-white/[0.04] px-3 py-1.5 rounded-lg border border-white/[0.08]">
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            Live
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-white">Liquidation Center</h1>
+          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide ${
+            systemStatus === 'healthy'
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+              : systemStatus === 'stressed'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                : 'bg-rose-500/20 text-rose-300 border border-rose-400/30 animate-pulse'
+          }`}>
+            {systemStatus === 'healthy' ? 'Healthy' : systemStatus === 'stressed' ? 'Stressed' : 'Critical'}
           </span>
-          
-          {/* Refresh button */}
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* ── Accented Coin Selector ─────────────────────────────── */}
+          {availableCoins.length > 1 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-500/[0.08] border border-teal-400/20 shadow-[0_0_12px_-4px_rgba(45,212,191,0.15)]">
+              <span className="text-[10px] text-teal-400/70 uppercase tracking-wider font-semibold">Assets</span>
+              <div className="flex gap-0.5">
+                <button
+                  onClick={selectAllCoins}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                    selectedCoins.length === 0
+                      ? 'bg-teal-400 text-slate-900 shadow-sm'
+                      : 'text-white/50 hover:text-white/80 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  All
+                </button>
+                {availableCoins.map(coin => (
+                  <button
+                    key={coin}
+                    onClick={() => toggleCoin(coin)}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                      selectedCoins.includes(coin)
+                        ? 'bg-teal-400 text-slate-900 shadow-sm'
+                        : selectedCoins.length === 0
+                          ? 'text-teal-300/60 hover:text-teal-300 hover:bg-teal-500/10'
+                          : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {coin}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Live indicator + refresh */}
+          <div className="flex items-center gap-2">
+            {lastUpdated && (
+              <span className="text-[10px] text-white/30">
+                {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-400/70 bg-emerald-500/[0.06] px-2 py-1 rounded-full border border-emerald-500/10">
+              <span className="flex h-1.5 w-1.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              Live
+            </span>
+            <button
+              onClick={refetchPositions}
+              disabled={positionsLoading}
+              className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <svg
+                className={`w-3.5 h-3.5 text-white/40 ${positionsLoading ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          NARRATIVE ONE-LINER — Instant vibe read
+      ═══════════════════════════════════════════════════════════════════ */}
+      {narrativeLine && (
+        <div className="text-sm text-white/40 -mt-2 mb-1 pl-0.5 tracking-wide">
+          <span className={`${
+            systemStatus === 'critical' ? 'text-rose-300/70' :
+            systemStatus === 'stressed' ? 'text-amber-300/60' :
+            'text-white/30'
+          }`}>
+            {narrativeLine}
+          </span>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          HERO STATS — Two things a spectator cares about
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Positions in Danger */}
+        <div className={`rounded-xl p-5 border transition-all ${
+          dangerMetrics.inDanger > 0
+            ? 'bg-gradient-to-br from-rose-500/[0.08] to-amber-500/[0.04] border-rose-500/20'
+            : 'bg-white/[0.03] border-white/[0.06]'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                {dangerMetrics.inDanger > 0 && (
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                  </span>
+                )}
+                <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+                  {dangerMetrics.inDanger > 0 ? 'Positions in Danger' : 'All Positions Safe'}
+                </span>
+              </div>
+              <div className={`text-4xl font-bold tabular-nums leading-none ${
+                dangerMetrics.inDanger > 0 ? 'text-rose-400' : 'text-emerald-400'
+              }`}>
+                {positionsLoading && dangerMetrics.totalPositions === 0 ? (
+                  <div className="h-10 w-8 bg-white/10 rounded animate-pulse" />
+                ) : dangerMetrics.inDanger > 0 ? (
+                  dangerMetrics.inDanger
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              {dangerMetrics.inDanger > 0 && (
+                <div className="text-xs text-white/40 mt-1.5">
+                  {dangerMetrics.liquidatableCount > 0 && (
+                    <span className="text-rose-300">{dangerMetrics.liquidatableCount} liquidatable</span>
+                  )}
+                  {dangerMetrics.liquidatableCount > 0 && dangerMetrics.criticalCount > 0 && ' · '}
+                  {dangerMetrics.criticalCount > 0 && (
+                    <span className="text-amber-300">{dangerMetrics.criticalCount} critical</span>
+                  )}
+                  {dangerMetrics.totalDebtInDanger > 0 && (
+                    <span className="text-white/30"> · {formatUsd(dangerMetrics.totalDebtInDanger)} at risk</span>
+                  )}
+                </div>
+              )}
+              {dangerMetrics.inDanger === 0 && (
+                <div className="text-xs text-white/30 mt-1.5">
+                  {dangerMetrics.totalPositions} positions monitored
+                  {dangerMetrics.watchingCount > 0 && ` · ${dangerMetrics.watchingCount} on watch`}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Last Rekt */}
+        <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
+          <div className="text-[10px] text-white/40 uppercase tracking-wider font-semibold mb-1">
+            Last Liquidation
+          </div>
+          {lastLiquidation ? (
+            <div>
+              <div className="text-2xl font-bold text-white tabular-nums leading-none">
+                {timeAgo(lastLiquidation.timestamp)}
+              </div>
+              <div className="text-xs text-white/40 mt-1.5">
+                <span className="text-rose-300">{formatUsd(lastLiquidation.amount)}</span> rekt
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-2xl font-bold text-white/20 leading-none">—</div>
+              <div className="text-xs text-white/30 mt-1.5">No recent liquidations</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          LIVE ACTIVITY FEED — Recent margin events
+      ═══════════════════════════════════════════════════════════════════ */}
+      <LiveActivityFeed positions={filteredPositions} />
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          SECTION NAV — Sticky pill navigation
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div className="sticky top-[56px] z-30 -mx-4 px-4 py-2" style={{ background: 'rgba(13,26,31,0.95)', backdropFilter: 'blur(12px)' }}>
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.05] w-fit">
+          {SECTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => scrollToSection(id)}
+              className={`px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all ${
+                activeSection === id
+                  ? 'bg-teal-500/20 text-teal-300 shadow-sm'
+                  : 'text-white/35 hover:text-white/60 hover:bg-white/[0.04]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          ERROR STATE
+      ═══════════════════════════════════════════════════════════════════ */}
+      {positionsError && (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 text-center">
+          <p className="text-rose-400">
+            Error loading positions: {positionsError.message}
+          </p>
           <button
             onClick={refetchPositions}
-            disabled={positionsLoading}
-            className="p-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] transition-colors disabled:opacity-50"
-            title="Refresh data"
+            className="mt-3 px-4 py-2 text-sm bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg transition-colors"
           >
-            <svg
-              className={`w-4 h-4 text-white/60 ${positionsLoading ? 'animate-spin' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            Try Again
           </button>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          SECTION: MARKET — Net Positioning + Gravity + Hot Positions
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div id="market" className="scroll-mt-[120px]">
+        <MarketOverview
+          positions={filteredPositions}
+          isLoading={positionsLoading}
+          onOpenWallet={handleOpenWallet}
+          selectedCoins={selectedCoins}
+        />
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          HERO METRICS STRIP - Key numbers at a glance
+          PROFIT OPPORTUNITY BANNER
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {/* Total Positions */}
-        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Total Positions</div>
-          <div className="text-2xl font-bold text-white tabular-nums">
-            {positionsLoading && metrics.totalPositions === 0 ? (
-              <div className="h-8 w-12 bg-white/10 rounded animate-pulse" />
-            ) : (
-              metrics.totalPositions
-            )}
-          </div>
-          <div className="text-xs text-white/30 mt-1">monitored</div>
-        </div>
-
-        {/* Liquidatable Now */}
-        <div className={`rounded-xl p-4 border ${
-          liquidatableCount > 0 
-            ? 'bg-rose-500/10 border-rose-500/30' 
-            : 'bg-white/[0.03] border-white/[0.06]'
-        }`}>
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Liquidatable Now</div>
-          <div className={`text-2xl font-bold tabular-nums ${liquidatableCount > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-            {positionsLoading && metrics.totalPositions === 0 ? (
-              <div className="h-8 w-12 bg-white/10 rounded animate-pulse" />
-            ) : (
-              liquidatableCount
-            )}
-          </div>
-          <div className={`text-xs mt-1 ${liquidatableCount > 0 ? 'text-rose-300' : 'text-white/30'}`}>
-            {liquidatableCount > 0 ? formatUsd(metrics.totalLiquidatableDebt) + ' debt' : 'none'}
-          </div>
-        </div>
-
-        {/* Critical (< 10%) */}
-        <div className={`rounded-xl p-4 border ${
-          metrics.criticalCount > 0 
-            ? 'bg-amber-500/10 border-amber-500/30' 
-            : 'bg-white/[0.03] border-white/[0.06]'
-        }`}>
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Critical</div>
-          <div className={`text-2xl font-bold tabular-nums ${metrics.criticalCount > 0 ? 'text-amber-400' : 'text-white/30'}`}>
-            {metrics.criticalCount}
-          </div>
-          <div className="text-xs text-white/30 mt-1">&lt; 10% buffer</div>
-        </div>
-
-        {/* Watching */}
-        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Watching</div>
-          <div className="text-2xl font-bold text-teal-400 tabular-nums">
-            {metrics.watchCount}
-          </div>
-          <div className="text-xs text-white/30 mt-1">10-25% buffer</div>
-        </div>
-
-        {/* Smallest Buffer */}
-        <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Closest to Liq</div>
-          <div className={`text-2xl font-bold tabular-nums ${
-            metrics.smallestBuffer === null ? 'text-white/30' :
-            metrics.smallestBuffer < 5 ? 'text-rose-400' :
-            metrics.smallestBuffer < 15 ? 'text-amber-400' :
-            'text-emerald-400'
-          }`}>
-            {metrics.smallestBuffer !== null ? `${metrics.smallestBuffer.toFixed(0)}%` : '—'}
-          </div>
-          <div className="text-xs text-white/30 mt-1">buffer</div>
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          PROFIT OPPORTUNITY BANNER - Only shows if liquidatable positions exist
-      ═══════════════════════════════════════════════════════════════════ */}
-      {liquidatableCount > 0 && (
+      {dangerMetrics.liquidatableCount > 0 && (
         <div className="bg-gradient-to-r from-orange-500/15 to-orange-500/5 rounded-xl border border-orange-500/30 p-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
                 <svg className="w-5 h-5 text-orange-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <div>
                 <h3 className="text-base font-semibold text-orange-200">
-                  {liquidatableCount} Position{liquidatableCount > 1 ? 's' : ''} At Risk
+                  {dangerMetrics.liquidatableCount} Position{dangerMetrics.liquidatableCount > 1 ? 's' : ''} Ready to Liquidate
                 </h3>
                 <p className="text-sm text-white/60">
-                  Total debt: {formatUsd(metrics.totalLiquidatableDebt)}
-                  <span className="text-white/40 ml-2">· May fail if price moves</span>
+                  Total debt: {formatUsd(dangerMetrics.totalDebtInDanger)}
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setActiveTab('monitor')}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 transition-all flex items-center gap-2"
-            >
-              View Positions
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
-          SECTION NAVIGATION - Monitor, Analytics, Proof
+          SECTION: POSITIONS — Positioned here as anchor but content
+          is inside MarketOverview (hot positions are the hero there)
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center gap-2 border-b border-white/[0.08] pb-1">
-        <span className="text-[10px] uppercase tracking-wider font-medium text-white/30 mr-2">Explore:</span>
-        
-        <button
-          onClick={() => setActiveTab('monitor')}
-          className={`px-4 py-2.5 rounded-t-lg text-sm font-medium transition-all flex items-center gap-2 border-b-2 -mb-[5px] ${
-            activeTab === 'monitor'
-              ? 'bg-white/[0.06] text-white border-teal-400'
-              : 'text-white/50 hover:text-white hover:bg-white/[0.03] border-transparent'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          Live Risk Monitor
-          {liquidatableCount > 0 && (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-500 text-white">
-              {liquidatableCount}
-            </span>
-          )}
-        </button>
+      <div id="positions" className="scroll-mt-[120px]" />
 
-        <button
-          onClick={() => setActiveTab('proof')}
-          className={`px-4 py-2.5 rounded-t-lg text-sm font-medium transition-all flex items-center gap-2 border-b-2 -mb-[5px] ${
-            activeTab === 'proof'
-              ? 'bg-white/[0.06] text-white border-teal-400'
-              : 'text-white/50 hover:text-white hover:bg-white/[0.03] border-transparent'
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          History
-        </button>
+      {/* ═══════════════════════════════════════════════════════════════════
+          SECTION: RISK MONITOR
+      ═══════════════════════════════════════════════════════════════════ */}
+      {!positionsError && (
+        <div id="risk" className="scroll-mt-[120px]">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-1 h-5 rounded-full bg-gradient-to-b from-cyan-400 to-cyan-600" />
+            <h2 className="text-sm font-semibold text-white/80 uppercase tracking-wider">
+              Risk Monitor
+            </h2>
+            <span className="text-[10px] text-white/20">Analyst view · Stress testing</span>
+          </div>
+          <LiveRiskMonitor
+            positions={filteredPositions}
+            isLoading={positionsLoading}
+            onLiquidate={handleLiquidate}
+            onOpenWallet={handleOpenWallet}
+            lastUpdated={lastUpdated}
+          />
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          SECTION: LIQUIDATION MAP
+      ═══════════════════════════════════════════════════════════════════ */}
+      <div id="map" className="scroll-mt-[120px]">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-1 h-5 rounded-full bg-gradient-to-b from-violet-400 to-violet-600" />
+          <h2 className="text-sm font-semibold text-white/80 uppercase tracking-wider">
+            Liquidation Map
+          </h2>
+        </div>
+        <LiquidationHeatmap
+          positions={filteredPositions}
+          isLoading={positionsLoading}
+          selectedCoins={selectedCoins}
+        />
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
-          TAB CONTENT
+          SECTION: HISTORY
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="min-h-[500px]">
-        {/* Error State */}
-        {positionsError && activeTab !== 'proof' && (
-          <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-6 text-center">
-            <p className="text-rose-400">
-              Error loading positions: {positionsError.message}
-            </p>
-            <button
-              onClick={refetchPositions}
-              className="mt-3 px-4 py-2 text-sm bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-
-        {/* Live Risk Monitor */}
-        {activeTab === 'monitor' && !positionsError && (
-          <LiveRiskMonitor
-            positions={positions}
-            isLoading={positionsLoading}
-            onLiquidate={handleLiquidate}
-            lastUpdated={lastUpdated}
-          />
-        )}
-
-        {/* Protocol Proof & History */}
-        {activeTab === 'proof' && (
-          <ProtocolProofSection />
-        )}
+      <div id="history" className="scroll-mt-[120px]">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-1 h-5 rounded-full bg-gradient-to-b from-amber-400 to-amber-600" />
+          <h2 className="text-sm font-semibold text-white/80 uppercase tracking-wider">
+            Protocol History
+          </h2>
+          <span className="text-[10px] text-white/20">Analytics · Research</span>
+        </div>
+        <ProtocolProofSection />
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          MODALS & OVERLAYS
+      ═══════════════════════════════════════════════════════════════════ */}
 
       {/* Transaction Modal */}
       {transactionInfo && (
@@ -475,10 +709,10 @@ export function LiquidationDashboard() {
           onContinue={executeLiquidation}
           transactionInfo={{
             ...transactionInfo,
-            summary: liquidationError 
-              ? `Error: ${liquidationError}` 
-              : isLiquidating 
-                ? "Updating oracle prices & executing liquidation..." 
+            summary: liquidationError
+              ? `Error: ${liquidationError}`
+              : isLiquidating
+                ? "Updating oracle prices & executing liquidation..."
                 : transactionInfo.summary,
           }}
           disabled={!selectedPosition?.isLiquidatable || isLiquidating || !account}
@@ -497,6 +731,13 @@ export function LiquidationDashboard() {
         txDigest={toastTxDigest}
         explorerUrl={`https://suivision.xyz`}
         error={toastError}
+      />
+
+      {/* Wallet Detail Drawer */}
+      <WalletDrawer
+        position={drawerPosition}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
       />
     </div>
     </ScenarioProvider>

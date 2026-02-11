@@ -265,6 +265,76 @@ export function LiquidityTab({ pool }: LiquidityTabProps) {
     };
   }, [pool.state, currentUtilization]);
 
+  // ── Withdrawal Pressure estimate ──
+  const withdrawalPressure = React.useMemo(() => {
+    if (dailyData.length < 3) return null;
+
+    // Look at last 7 data points (days)
+    const recent = dailyData.slice(-7);
+    const prevWeek = dailyData.slice(-14, -7);
+
+    // Recent average daily withdrawal (supply decrease)
+    const recentDailyWithdraw = recent.reduce((sum, d, i) => {
+      if (i === 0) return 0;
+      const supplyDelta = d.supply - recent[i - 1].supply;
+      return sum + (supplyDelta < 0 ? Math.abs(supplyDelta) : 0);
+    }, 0) / Math.max(recent.length - 1, 1);
+
+    // Previous week avg daily withdrawal
+    const prevDailyWithdraw = prevWeek.length > 1
+      ? prevWeek.reduce((sum, d, i) => {
+          if (i === 0) return 0;
+          const supplyDelta = d.supply - prevWeek[i - 1].supply;
+          return sum + (supplyDelta < 0 ? Math.abs(supplyDelta) : 0);
+        }, 0) / Math.max(prevWeek.length - 1, 1)
+      : 0;
+
+    // Days to drain at current withdrawal rate
+    const daysToEmpty = recentDailyWithdraw > 0
+      ? currentAvailable / recentDailyWithdraw
+      : Infinity;
+
+    // Acceleration: is withdrawal pressure increasing?
+    const accelerating = prevDailyWithdraw > 0
+      ? ((recentDailyWithdraw - prevDailyWithdraw) / prevDailyWithdraw) * 100
+      : 0;
+
+    // Utilization trend (last 7 days)
+    const utilTrend = recent.length >= 2
+      ? recent[recent.length - 1].utilization - recent[0].utilization
+      : 0;
+
+    // Pressure score: 0-100
+    let pressureScore = 0;
+    if (daysToEmpty < 7) pressureScore += 40;
+    else if (daysToEmpty < 30) pressureScore += 20;
+    else if (daysToEmpty < 90) pressureScore += 10;
+
+    if (accelerating > 50) pressureScore += 25;
+    else if (accelerating > 20) pressureScore += 15;
+    else if (accelerating > 0) pressureScore += 5;
+
+    if (utilTrend > 10) pressureScore += 25;
+    else if (utilTrend > 5) pressureScore += 15;
+    else if (utilTrend > 0) pressureScore += 5;
+
+    if (currentUtilization > 80) pressureScore += 10;
+    else if (currentUtilization > 60) pressureScore += 5;
+
+    pressureScore = Math.min(100, pressureScore);
+
+    return {
+      recentDailyWithdraw,
+      daysToEmpty,
+      accelerating,
+      utilTrend,
+      pressureScore,
+      level: pressureScore >= 60 ? "High" as const :
+             pressureScore >= 30 ? "Moderate" as const :
+             "Low" as const,
+    };
+  }, [dailyData, currentAvailable, currentUtilization]);
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -370,6 +440,85 @@ export function LiquidityTab({ pool }: LiquidityTabProps) {
           <div className="text-xs text-white/40 mt-1">Ready for withdrawal</div>
         </div>
       </div>
+
+      {/* Withdrawal Pressure Estimate */}
+      {withdrawalPressure && (
+        <div className={`bg-white/5 rounded-2xl p-4 border ${
+          withdrawalPressure.level === "High" ? "border-red-500/30" :
+          withdrawalPressure.level === "Moderate" ? "border-amber-500/30" : "border-emerald-500/30"
+        }`}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white">Withdrawal Pressure</h3>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+              withdrawalPressure.level === "High" ? "bg-red-500/20 text-red-400" :
+              withdrawalPressure.level === "Moderate" ? "bg-amber-500/20 text-amber-400" :
+              "bg-emerald-500/20 text-emerald-400"
+            }`}>
+              {withdrawalPressure.level}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Avg Daily Withdrawal</div>
+              <div className="text-sm font-bold text-white font-mono">
+                {formatNumber(withdrawalPressure.recentDailyWithdraw)}
+                <span className="text-white/40 text-xs ml-1">{pool.asset}/day</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Days to Drain</div>
+              <div className={`text-sm font-bold font-mono ${
+                withdrawalPressure.daysToEmpty < 7 ? "text-red-400" :
+                withdrawalPressure.daysToEmpty < 30 ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {withdrawalPressure.daysToEmpty === Infinity ? "∞" :
+                 withdrawalPressure.daysToEmpty > 365 ? "365+" :
+                 withdrawalPressure.daysToEmpty.toFixed(0)}
+                <span className="text-white/40 text-xs ml-1">days</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">W/D Acceleration</div>
+              <div className={`text-sm font-bold font-mono ${
+                withdrawalPressure.accelerating > 20 ? "text-red-400" :
+                withdrawalPressure.accelerating > 0 ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {withdrawalPressure.accelerating > 0 ? "+" : ""}
+                {withdrawalPressure.accelerating.toFixed(0)}%
+                <span className="text-white/40 text-xs ml-1">vs prev week</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">Util Trend (7d)</div>
+              <div className={`text-sm font-bold font-mono ${
+                withdrawalPressure.utilTrend > 5 ? "text-red-400" :
+                withdrawalPressure.utilTrend > 0 ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {withdrawalPressure.utilTrend > 0 ? "+" : ""}
+                {withdrawalPressure.utilTrend.toFixed(1)}pp
+              </div>
+            </div>
+          </div>
+
+          {/* Pressure bar */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-[10px] text-white/30 mb-1">
+              <span>Pressure Score</span>
+              <span>{withdrawalPressure.pressureScore}/100</span>
+            </div>
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  withdrawalPressure.level === "High" ? "bg-red-500" :
+                  withdrawalPressure.level === "Moderate" ? "bg-amber-500" : "bg-emerald-500"
+                }`}
+                style={{ width: `${withdrawalPressure.pressureScore}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chart */}
       <div className="bg-white/5 rounded-2xl p-6 border border-white/10">

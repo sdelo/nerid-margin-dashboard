@@ -129,6 +129,15 @@ export function useReferralActivity(pool: PoolOverview | null): ReferralActivity
     [referralsMintedQuery.data]
   );
 
+  // Defer on-chain referral fetch so it doesn't compete with critical initial data
+  // (pool data, vault balances, etc.). The referral section is at the bottom of the
+  // page and doesn't need to load instantly.
+  const [deferredReady, setDeferredReady] = React.useState(false);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDeferredReady(true), 3_000); // 3s after mount
+    return () => clearTimeout(timer);
+  }, []);
+
   // Fetch on-chain referral tracker data for each referral
   const onChainDataQuery = useQuery({
     queryKey: ['referralTrackers', poolId, packageId, referralIds.join(',')],
@@ -136,15 +145,12 @@ export function useReferralActivity(pool: PoolOverview | null): ReferralActivity
       if (!poolId || !assetType || referralIds.length === 0) {
         return new Map<string, ReferralTrackerData>();
       }
-      console.log('[ReferralActivity] Fetching on-chain tracker data for', referralIds.length, 'referrals');
-      console.log('[ReferralActivity] Using packageId:', packageId, 'poolId:', poolId, 'assetType:', assetType);
-      const result = await fetchMultipleReferralTrackers(suiClient, poolId, referralIds, assetType, packageId, 5);
-      console.log('[ReferralActivity] Got tracker data for', result.size, 'referrals');
+      const result = await fetchMultipleReferralTrackers(suiClient, poolId, referralIds, assetType, packageId);
       return result;
     },
-    enabled: !!poolId && !!assetType && referralIds.length > 0,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000, // Refresh every minute
+    enabled: deferredReady && !!poolId && !!assetType && referralIds.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes (this data changes rarely)
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes (was 1 min)
   });
 
   // Transform and aggregate the data

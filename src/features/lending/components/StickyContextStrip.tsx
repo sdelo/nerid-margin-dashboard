@@ -2,9 +2,8 @@ import type { FC } from "react";
 import React from "react";
 import type { PoolOverview } from "../types";
 import { InfoTooltip } from "../../../components/InfoTooltip";
-import { useSuiClient } from "@mysten/dapp-kit";
-import { MarginPool } from "../../../contracts/deepbook_margin/deepbook_margin/margin_pool";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
+import type { VaultBalanceMap } from "../../../hooks/useVaultBalances";
 
 function formatNumber(n: number | bigint, decimals: number = 2) {
   const num = Number(n);
@@ -25,6 +24,7 @@ type Props = {
   pools: PoolOverview[];
   selectedPoolId: string | null;
   onSelectPool: (poolId: string) => void;
+  vaultBalances?: VaultBalanceMap;
 };
 
 export const StickyContextStrip: FC<Props> = ({
@@ -32,9 +32,8 @@ export const StickyContextStrip: FC<Props> = ({
   pools,
   selectedPoolId,
   onSelectPool,
+  vaultBalances = {},
 }) => {
-  const suiClient = useSuiClient();
-  const [vaultBalance, setVaultBalance] = React.useState<number | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -52,31 +51,8 @@ export const StickyContextStrip: FC<Props> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch vault balance
-  React.useEffect(() => {
-    async function fetchVaultBalance() {
-      if (!pool) return;
-      try {
-        const response = await suiClient.getObject({
-          id: pool.contracts.marginPoolId,
-          options: { showBcs: true },
-        });
-
-        if (response.data?.bcs?.dataType === "moveObject") {
-          const marginPool = MarginPool.fromBase64(response.data.bcs.bcsBytes);
-          const value =
-            Number(marginPool.vault.value) / 10 ** pool.contracts.coinDecimals;
-          setVaultBalance(value);
-        }
-      } catch (error) {
-        console.error("Error fetching vault balance:", error);
-      }
-    }
-
-    fetchVaultBalance();
-    const interval = setInterval(fetchVaultBalance, 15000);
-    return () => clearInterval(interval);
-  }, [pool, suiClient]);
+  // Use centralized vault balance from parent (useVaultBalances hook)
+  const vaultBalance = pool ? (vaultBalances[pool.id] ?? null) : null;
 
   if (!pool) {
     return (

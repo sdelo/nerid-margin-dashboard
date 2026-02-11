@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type ShockAsset = 'SUI' | 'DEEP' | 'ALL';
+export type ShockAsset = string; // Dynamic: 'SUI' | 'DEEP' | 'WAL' | 'ALL' | etc.
 
 export interface ScenarioRange {
   min: number;

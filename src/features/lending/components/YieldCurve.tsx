@@ -19,9 +19,11 @@ import { useChartFirstRender } from "../../../components/charts/StableChart";
 
 type Props = { 
   pool: PoolOverview;
+  /** When true, hides the header — parent provides it */
+  embedded?: boolean;
 };
 
-export const YieldCurve: FC<Props> = ({ pool }) => {
+export const YieldCurve: FC<Props> = ({ pool, embedded = false }) => {
   // Basic error handling for malformed data
   if (
     !pool?.protocolConfig?.interest_config ||
@@ -72,19 +74,21 @@ export const YieldCurve: FC<Props> = ({ pool }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header - matches Activity tab style */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-1">
-            Rate Model
-          </h2>
-          <p className="text-sm text-white/60">
-            How rates change with utilization for {pool.asset}
-          </p>
+      {/* Header - hidden when embedded in APYPanel */}
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-1">
+              Rate Model
+            </h2>
+            <p className="text-sm text-white/60">
+              How rates change with utilization for {pool.asset}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Stats Cards - matches Activity tab style */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-4">
         {/* HERO METRIC: Supply APY */}
         <div className="bg-white/5 rounded-2xl p-4 border border-teal-500/30">

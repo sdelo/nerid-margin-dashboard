@@ -28,6 +28,7 @@ import { Footer } from "../components/Footer";
 import { useStickyHeader } from "../context/StickyHeaderContext";
 import { usePoolActivityMetrics } from "../features/lending/hooks/usePoolActivityMetrics";
 import { useProtocolTopline } from "../hooks/useProtocolTopline";
+import { useVaultBalances } from "../hooks/useVaultBalances";
 import { InfoTooltip } from "../components/InfoTooltip";
 
 // ── Extracted hooks ────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ export function PoolsPage() {
     React.useState<DashboardSection>("pools");
 
   // ── Pool data ──────────────────────────────────────────────────────
-  const { pools, userPositions, isLoading, error: poolsError, refetch: refetchPools } =
+  const { pools, userPositions, isLoading, isLoadingPositions, error: poolsError, refetch: refetchPools } =
     useAllPools(account?.address);
 
   // ── URL state (pool + section synced to ?pool=SUI&section=risk) ─
@@ -132,6 +133,9 @@ export function PoolsPage() {
     },
     [],
   );
+
+  // ── Vault balances (centralized, shared across all components) ────
+  const { vaultBalances } = useVaultBalances(pools);
 
   // ── Protocol metrics ───────────────────────────────────────────────
   const { metrics: poolActivityMetrics } = usePoolActivityMetrics(pools);
@@ -426,6 +430,7 @@ export function PoolsPage() {
                           pools={pools}
                           selectedPoolId={selectedPoolId}
                           onSelectPool={handlePoolSelect}
+                          vaultBalances={vaultBalances}
                         />
                       </div>
                     </div>
@@ -488,6 +493,7 @@ export function PoolsPage() {
                       userAddress={account?.address}
                       pools={pools}
                       positions={userPositions}
+                      isLoading={isLoading || isLoadingPositions}
                       onViewAllHistory={() => setHistoryOpen(true)}
                       onSelectPool={handlePoolSelect}
                     />
